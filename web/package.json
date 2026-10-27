@@ -1,0 +1,28 @@
+{
+  "name": "contador-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Web compartida de Contador: usuarios, clientes y tiempos confirmados.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "migrate": "node --env-file-if-exists=.env src/db/migrate.ts",
+    "create-user": "node --env-file-if-exists=.env src/scripts/create-user.ts",
+    "dev": "node --env-file-if-exists=.env --watch src/server.ts",
+    "start": "node --env-file-if-exists=.env src/server.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "hono": "^4.13.14",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2"
+  }
+}
