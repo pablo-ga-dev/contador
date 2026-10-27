@@ -3,8 +3,8 @@
 Contabiliza automáticamente el tiempo que dedicas a cada proyecto, sin tener que
 apuntar nada a mano.
 
-> **Estado: fase 1.** El agente ya registra qué aplicación y qué dominio usas y
-> durante cuánto tiempo. Todavía no asigna ese tiempo a proyectos ni lo sube a
+> **Estado: fase 1.** El agente ya registra qué aplicación, qué dominio y qué
+> chat de WhatsApp usas, y durante cuánto tiempo. Todavía no asigna ese tiempo a proyectos ni lo sube a
 > ninguna web.
 
 ## Cómo funciona
@@ -14,10 +14,10 @@ apuntar nada a mano.
 │ Extensión navegador  │ ── pestaña activa ─▶│ Agente (Node, sin ventana) │
 │ (Chrome, Edge...)    │   127.0.0.1:5611    │                            │
 └──────────────────────┘                     │  Tracker ─▶ SQLite local   │
-┌──────────────────────┐  ventana activa +   │                            │
-│ PowerShell + API de  │ ── inactividad ────▶│                            │
-│ Windows              │   cada 5 s          └────────────────────────────┘
-└──────────────────────┘
+┌──────────────────────┐  ventana activa,    │                            │
+│ PowerShell + API de  │ ── inactividad y ──▶│                            │
+│ Windows              │   chat de WhatsApp  └────────────────────────────┘
+└──────────────────────┘   cada 5 s
 ```
 
 - **Ventana activa e inactividad**: cada 5 segundos se mira qué aplicación está
@@ -25,7 +25,10 @@ apuntar nada a mano.
   actividad se deja de contar (y se descuentan esos minutos).
 - **Dominios**: la extensión avisa al agente del dominio de la pestaña activa
   cuando cambias de pestaña y cada 30 segundos.
-- **Tramos**: mientras sigas en la misma ventana y dominio, se alarga el tramo
+- **Chats de WhatsApp** (app de escritorio): si la ventana activa es WhatsApp,
+  se lee el nombre del chat abierto con UI Automation, la API de los lectores de
+  pantalla. Solo el nombre de la cabecera; nunca los mensajes.
+- **Tramos**: mientras sigas en la misma ventana, dominio y chat, se alarga el tramo
   actual; al cambiar, empieza otro. Se guardan en
   `%LOCALAPPDATA%\contador\contador.db`.
 
@@ -63,8 +66,11 @@ Sin la extensión el agente funciona igual, pero no sabrá en qué dominio está
   `127.0.0.1`, así que nadie de la red puede conectarse a él.
 - Del navegador se guarda **solo el dominio** (`github.com`), nunca la URL
   completa ni el contenido de las páginas.
-- Los títulos de ventana sí se guardan en local, porque servirán para asignar
-  proyectos (p. ej. la carpeta abierta en VS Code). Nunca se subirán tal cual.
+- De WhatsApp se guarda **solo el nombre del chat** abierto, tal como aparece
+  en tu agenda. Nunca el contenido de los mensajes.
+- Los títulos de ventana y los nombres de chat sí se guardan en local, porque
+  servirán para asignar proyectos (p. ej. la carpeta abierta en VS Code o el chat
+  de un cliente). Nunca se subirán tal cual.
 
 ## Estructura
 
@@ -79,7 +85,7 @@ agent/src/
   storage/
     segment-store.ts   SQLite (node:sqlite, sin dependencias)
   sources/
-    windows/           ventana activa + inactividad vía PowerShell
+    windows/           ventana activa, inactividad y chat de WhatsApp vía PowerShell
     browser/           servidor local que recibe a la extensión
 extension/             extensión Manifest V3 para navegadores Chromium
 ```
@@ -93,11 +99,15 @@ implementación de esa interfaz; el tracker, el almacenamiento y la extensión n
 - Si ves un vídeo o estás en una videollamada sin tocar el teclado ni el ratón,
   tras 3 minutos se deja de contar.
 - Algunas apps de la Tienda de Windows aparecen como `ApplicationFrameHost`.
+- El chat de WhatsApp se lee de la estructura interna de la app (el elemento
+  `main` y su primer texto). Si una actualización de WhatsApp la cambia, el
+  tiempo se seguirá contando como WhatsApp, pero sin chat, hasta que lo ajustemos.
+- WhatsApp Web en el navegador cuenta por dominio (`web.whatsapp.com`), aún sin chat.
 - La extensión es solo para navegadores Chromium (Chrome, Edge, Brave...); Firefox aún no.
 - El agente hay que arrancarlo a mano; el arranque con Windows vendrá después.
 
 ## Próximos pasos
 
-1. WhatsApp Web: detectar con qué chat hablas (solo el nombre).
+1. WhatsApp Web en el navegador: detectar el chat desde la extensión.
 2. Reglas de asignación (dominio, app, chat → proyecto) y revisión diaria.
 3. Web compartida multiusuario y sincronización.

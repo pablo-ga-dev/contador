@@ -4,6 +4,8 @@ export interface WindowSample {
   /** Nombre del proceso, p. ej. "Code" o "chrome". Vacío si no hay ventana activa. */
   app: string;
   title: string;
+  /** Chat abierto si la ventana es WhatsApp; null si no aplica o no se pudo leer. */
+  chat: string | null;
   /** Segundos desde la última pulsación de teclado o movimiento de ratón. */
   idleSeconds: number;
 }
@@ -38,4 +40,5 @@ export interface Segment {
   app: string;
   title: string;
   domain: string | null;
+  chat: string | null;
 }

@@ -25,18 +25,31 @@ export class SegmentStore {
         ended_at   TEXT NOT NULL,
         app        TEXT NOT NULL,
         title      TEXT NOT NULL,
-        domain     TEXT
+        domain     TEXT,
+        chat       TEXT
       );
       CREATE INDEX IF NOT EXISTS segments_started_at ON segments (started_at);
     `);
+    // Bases creadas antes de detectar chats de WhatsApp.
+    const columns = this.db.prepare('PRAGMA table_info(segments)').all();
+    if (!columns.some((c) => c.name === 'chat')) {
+      this.db.exec('ALTER TABLE segments ADD COLUMN chat TEXT');
+    }
     this.insertStmt = this.db.prepare(
-      'INSERT INTO segments (started_at, ended_at, app, title, domain) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO segments (started_at, ended_at, app, title, domain, chat) VALUES (?, ?, ?, ?, ?, ?)',
     );
     this.updateStmt = this.db.prepare('UPDATE segments SET ended_at = ? WHERE id = ?');
   }
 
   insert(s: Segment): number {
-    const result = this.insertStmt.run(s.start.toISOString(), s.end.toISOString(), s.app, s.title, s.domain);
+    const result = this.insertStmt.run(
+      s.start.toISOString(),
+      s.end.toISOString(),
+      s.app,
+      s.title,
+      s.domain,
+      s.chat,
+    );
     return Number(result.lastInsertRowid);
   }
 
@@ -45,8 +58,8 @@ export class SegmentStore {
     this.updateStmt.run(s.end.toISOString(), s.id);
   }
 
-  /** Tiempo total entre `from` y `to`, agrupado por aplicación o por dominio. */
-  totalsBy(field: 'app' | 'domain', from: Date, to: Date): Total[] {
+  /** Tiempo total entre `from` y `to`, agrupado por aplicación, dominio o chat. */
+  totalsBy(field: 'app' | 'domain' | 'chat', from: Date, to: Date): Total[] {
     const rows = this.db
       .prepare(
         `SELECT ${field} AS key,

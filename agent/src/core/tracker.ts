@@ -7,7 +7,7 @@ const MAX_GAP_MS = config.pollIntervalSeconds * 3 * 1000;
 
 /**
  * Convierte muestras sueltas en tramos continuos: mientras sigas en la misma
- * ventana (y dominio), se alarga el tramo actual; si cambias, empieza otro.
+ * ventana (y dominio o chat), se alarga el tramo actual; si cambias, empieza otro.
  */
 export class Tracker {
   private current: Segment | null = null;
@@ -29,7 +29,13 @@ export class Tracker {
     const cur = this.current;
     const continuous = cur !== null && sample.at.getTime() - cur.end.getTime() <= MAX_GAP_MS;
 
-    if (continuous && cur.app === sample.app && cur.title === sample.title && cur.domain === domain) {
+    if (
+      continuous &&
+      cur.app === sample.app &&
+      cur.title === sample.title &&
+      cur.domain === domain &&
+      cur.chat === sample.chat
+    ) {
       cur.end = sample.at;
       this.store.update(cur);
       return;
@@ -40,7 +46,14 @@ export class Tracker {
       cur.end = sample.at;
       this.store.update(cur);
     }
-    this.current = { start: sample.at, end: sample.at, app: sample.app, title: sample.title, domain };
+    this.current = {
+      start: sample.at,
+      end: sample.at,
+      app: sample.app,
+      title: sample.title,
+      domain,
+      chat: sample.chat,
+    };
     this.current.id = this.store.insert(this.current);
   }
 

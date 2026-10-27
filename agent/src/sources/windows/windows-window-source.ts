@@ -35,8 +35,8 @@ export class WindowsWindowSource implements WindowSource {
 
     readline.createInterface({ input: child.stdout! }).on('line', (line) => {
       try {
-        const raw = JSON.parse(line.replace(/^﻿/, '')) as Omit<WindowSample, 'at'>;
-        onSample({ at: new Date(), app: raw.app, title: raw.title, idleSeconds: raw.idleSeconds });
+        const raw = JSON.parse(line.replace(/^﻿/, '')) as { app: string; title: string; chat: string; idleSeconds: number };
+        onSample({ at: new Date(), app: raw.app, title: raw.title, chat: raw.chat || null, idleSeconds: raw.idleSeconds });
       } catch {
         // Línea que no es JSON (p. ej. un aviso de PowerShell): se ignora.
       }

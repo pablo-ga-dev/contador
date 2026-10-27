@@ -1,4 +1,4 @@
-// Resumen de un día: tiempo por aplicación y por dominio.
+// Resumen de un día: tiempo por aplicación, por dominio y por chat de WhatsApp.
 // Uso: npm run report            (hoy)
 //      npm run report 2026-10-27 (un día concreto)
 import path from 'node:path';
@@ -39,4 +39,5 @@ const total = byApp.reduce((sum, t) => sum + t.seconds, 0);
 console.log(`Actividad del ${from.toLocaleDateString('es-ES')}: ${formatDuration(total)}`);
 print('Por aplicación', byApp);
 print('Por dominio', store.totalsBy('domain', from, to));
+print('Por chat de WhatsApp', store.totalsBy('chat', from, to));
 store.close();
