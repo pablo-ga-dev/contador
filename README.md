@@ -3,9 +3,10 @@
 Contabiliza automáticamente el tiempo que dedicas a cada proyecto, sin tener que
 apuntar nada a mano.
 
-> **Estado: fase 1.** El agente ya registra qué aplicación, qué dominio y qué
-> chat de WhatsApp usas, y durante cuánto tiempo. Todavía no asigna ese tiempo a proyectos ni lo sube a
-> ninguna web.
+> **Estado.** El agente ya registra qué aplicación, qué dominio y qué chat de
+> WhatsApp usas, y durante cuánto tiempo, y lo muestra en un panel local. La web
+> compartida ya tiene usuarios, clientes y la API para recibir días confirmados;
+> falta la pantalla de revisión del día en el agente y los informes de la web.
 
 ## Cómo funciona
 
@@ -76,6 +77,44 @@ O de un día concreto: `npm run report 2026-10-27`.
 
 Sin la extensión el agente funciona igual, pero no sabrá en qué dominio estás.
 
+## Web compartida
+
+La carpeta `web/` es la web del equipo: usuarios, clientes y los tiempos que
+cada uno confirma al final del día. Es un servidor Node/TypeScript
+([Hono](https://hono.dev)) con Postgres.
+
+### Ponerla en marcha (desarrollo)
+
+Necesitas [Docker](https://www.docker.com) para la base de datos.
+
+```bash
+cd web
+npm install
+cp .env.example .env
+npm run db:up        # Postgres en Docker (puerto 5433)
+npm run migrate      # crea las tablas
+npm run create-user -- tu@email.com "Tu Nombre"
+npm run dev          # http://localhost:3030
+```
+
+`create-user` muestra una contraseña temporal una sola vez; cámbiala al entrar.
+Para parar la base de datos: `npm run db:down` (los datos se conservan).
+
+### Qué hace ya
+
+- Inicio de sesión, cambio de contraseña y alta de usuarios por comando.
+- Clientes: lista con buscador y alta (sin duplicados, aunque cambien mayúsculas).
+- **Código del agente**: se genera en la web y lo usará el agente del PC para
+  enviar los días. Solo se muestra una vez y generar otro invalida el anterior.
+- API para el agente:
+  - `GET /api/clients` y `GET /api/rules` (qué cliente se preselecciona para
+    cada dominio, chat o app; compartidas por todo el equipo).
+  - `PUT /api/days/AAAA-MM-DD`: el día confirmado, actividad por actividad
+    (cliente, interno o sin cliente). Volver a enviarlo lo sustituye. Las
+    actividades marcadas para recordar actualizan las reglas.
+
+Lo marcado como **Personal** en la revisión nunca se envía.
+
 ## Privacidad
 
 - Todo se guarda **solo en tu equipo**. El agente escucha únicamente en
@@ -111,6 +150,15 @@ agent/src/
     windows/           ventana activa, inactividad y chat de WhatsApp vía PowerShell
     browser/           último dominio recibido de la extensión
 extension/             extensión Manifest V3 para navegadores Chromium
+web/
+  src/
+    server.ts          servidor web y protección CSRF
+    auth/              contraseñas, sesiones y código del agente
+    routes/            API: auth, clientes, reglas y días
+    db/                conexión, migraciones SQL y su aplicador
+    scripts/           alta de usuarios
+  public/index.html    la web (HTML, CSS y JS sin dependencias)
+  docker-compose.yml   Postgres de desarrollo
 ```
 
 **Preparado para migrar**: la única pieza que depende del sistema operativo es
@@ -133,6 +181,11 @@ podría mostrarlo tal cual en su ventana.
 
 ## Próximos pasos
 
-1. WhatsApp Web en el navegador: detectar el chat desde la extensión.
-2. Reglas de asignación (dominio, app, chat → proyecto) y revisión diaria.
-3. Web compartida multiusuario y sincronización.
+1. Revisión del día en el panel del agente: cliente por actividad (con buscador
+   y alta), Interno, Sin cliente y Personal; preselección por reglas y envío a la web.
+2. Informes en la web: usuario × día y cliente × mes.
+3. Recordatorio 7 h 30 min después del primer encendido del día, revisión de
+   días pendientes al encender y arranque del agente con Windows.
+4. Aviso al apagar el PC.
+5. Despliegue de la web en el servidor (HTTPS, `COOKIE_SECURE=true`).
+6. WhatsApp Web en el navegador: detectar el chat desde la extensión.

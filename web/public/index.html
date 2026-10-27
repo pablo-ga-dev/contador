@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contador</title>
+<style>
+  :root {
+    --surface-0: #f4f4f2;
+    --surface-1: #fcfcfb;
+    --border: #e4e3df;
+    --hover: #edece8;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #7a7974;
+    --accent: #2a78d6;
+    --accent-text: #ffffff;
+    --danger: #c43d3c;
+    --ok: #0c8a0c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-0: #121211;
+      --surface-1: #1a1a19;
+      --border: #2c2c2a;
+      --hover: #262624;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8f8e86;
+      --accent: #3987e5;
+      --danger: #e66767;
+      --ok: #2fbf2f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface-0); color: var(--text-primary);
+    font: 14px/1.45 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  }
+  [hidden] { display: none !important; }
+  header {
+    display: flex; align-items: center; gap: 16px; padding: 14px 24px;
+    background: var(--surface-1); border-bottom: 1px solid var(--border);
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1; }
+  header .who { color: var(--text-secondary); }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 40px; }
+  .grid { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; align-items: start; }
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+  .card h2 {
+    margin: 0 0 12px; font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary);
+  }
+  .card p { margin: 0 0 12px; color: var(--text-secondary); }
+  label { display: block; margin-bottom: 10px; color: var(--text-secondary); font-size: 13px; }
+  input {
+    display: block; width: 100%; margin-top: 4px; padding: 7px 10px;
+    font: inherit; color: var(--text-primary); background: var(--surface-0);
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    font: inherit; padding: 7px 14px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--text-primary);
+  }
+  button:hover { background: var(--hover); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button.primary:hover { filter: brightness(1.08); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row input { margin-top: 0; }
+  .msg { min-height: 1.4em; margin-top: 8px; font-size: 13px; }
+  .msg.error { color: var(--danger); }
+  .msg.ok { color: var(--ok); }
+
+  .login { max-width: 360px; margin: 10vh auto 0; }
+  .login h2 { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--text-primary); }
+
+  .clients { list-style: none; margin: 12px 0 0; padding: 0; max-height: 420px; overflow: auto; }
+  .clients li { padding: 8px 4px; border-top: 1px solid var(--border); }
+  .clients li:first-child { border-top: 0; }
+  .muted { color: var(--text-muted); }
+  code.agent-code {
+    display: block; margin: 8px 0; padding: 10px; border-radius: 6px; word-break: break-all;
+    background: var(--surface-0); border: 1px dashed var(--border);
+    font: 13px/1.4 Consolas, "Cascadia Mono", monospace;
+  }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<section id="login-view" hidden>
+  <form class="card login" id="login-form">
+    <h2>Contador</h2>
+    <label>Email <input type="email" name="email" autocomplete="username" required></label>
+    <label>Contraseña <input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="primary" type="submit">Entrar</button>
+    <div class="msg" id="login-msg"></div>
+  </form>
+</section>
+
+<section id="app-view" hidden>
+  <header>
+    <h1>Contador</h1>
+    <span class="who" id="who"></span>
+    <button id="logout">Salir</button>
+  </header>
+  <main class="grid">
+    <section class="card">
+      <h2>Clientes</h2>
+      <form class="row" id="client-form">
+        <input name="client" placeholder="Buscar o crear cliente…" autocomplete="off" maxlength="120">
+        <button class="primary" type="submit">Nuevo</button>
+      </form>
+      <div class="msg" id="client-msg"></div>
+      <ul class="clients" id="clients"></ul>
+    </section>
+
+    <div class="stack">
+      <section class="card">
+        <h2>Conectar el agente</h2>
+        <p>Genera un código y pégalo en el panel del agente de tu PC. Solo se muestra una vez; si generas otro, el anterior deja de valer.</p>
+        <button id="agent-code-btn">Generar código</button>
+        <div id="agent-code-box" hidden>
+          <code class="agent-code" id="agent-code"></code>
+          <button id="copy-code">Copiar</button>
+        </div>
+        <div class="msg" id="agent-msg"></div>
+      </section>
+
+      <section class="card">
+        <h2>Cambiar contraseña</h2>
+        <form id="password-form">
+          <label>Contraseña actual <input type="password" name="current" autocomplete="current-password" required></label>
+          <label>Contraseña nueva (mínimo 10 caracteres)
+            <input type="password" name="next" autocomplete="new-password" minlength="10" required></label>
+          <button type="submit">Cambiar</button>
+          <div class="msg" id="password-msg"></div>
+        </form>
+      </section>
+    </div>
+  </main>
+</section>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let clients = [];
+
+  async function api(method, path, body) {
+    // El servidor exige JSON en todo lo que no sea GET (protección CSRF).
+    const send = method !== 'GET';
+    const res = await fetch(path, {
+      method,
+      headers: send ? { 'Content-Type': 'application/json' } : {},
+      body: send ? JSON.stringify(body ?? {}) : undefined,
+    });
+    const data = res.status === 204 ? null : await res.json().catch(() => null);
+    if (!res.ok) {
+      const err = new Error(data?.error ?? `Error ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
+  function say(id, text, kind = 'error') {
+    const el = $(id);
+    el.textContent = text;
+    el.className = `msg ${kind}`;
+  }
+
+  async function start() {
+    try {
+      const me = await api('GET', '/api/auth/me');
+      showApp(me);
+    } catch (err) {
+      if (err.status !== 401) say('login-msg', err.message);
+      $('login-view').hidden = false;
+      $('app-view').hidden = true;
+    }
+  }
+
+  async function showApp(me) {
+    $('who').textContent = me.name;
+    $('login-view').hidden = true;
+    $('app-view').hidden = false;
+    clients = await api('GET', '/api/clients');
+    renderClients();
+  }
+
+  function renderClients() {
+    const query = $('client-form').client.value.trim().toLowerCase();
+    const shown = clients.filter((c) => c.name.toLowerCase().includes(query));
+    const list = $('clients');
+    list.replaceChildren();
+    if (shown.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'muted';
+      li.textContent = clients.length === 0 ? 'Todavía no hay clientes.' : 'Ningún cliente coincide. Pulsa «Nuevo» para crearlo.';
+      list.append(li);
+    }
+    for (const c of shown) {
+      const li = document.createElement('li');
+      li.textContent = c.name;
+      list.append(li);
+    }
+  }
+
+  $('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    try {
+      showApp(await api('POST', '/api/auth/login', { email: f.email.value, password: f.password.value }));
+      f.reset();
+      say('login-msg', '');
+    } catch (err) {
+      say('login-msg', err.message);
+    }
+  });
+
+  $('logout').addEventListener('click', async () => {
+    await api('POST', '/api/auth/logout');
+    location.reload();
+  });
+
+  $('client-form').client.addEventListener('input', renderClients);
+  $('client-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = e.target.client;
+    try {
+      const created = await api('POST', '/api/clients', { name: input.value });
+      if (!clients.some((c) => c.id === created.id)) clients.push(created);
+      clients.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      input.value = '';
+      renderClients();
+      say('client-msg', `Cliente «${created.name}» listo.`, 'ok');
+    } catch (err) {
+      say('client-msg', err.message);
+    }
+  });
+
+  $('agent-code-btn').addEventListener('click', async () => {
+    try {
+      const { code } = await api('POST', '/api/auth/agent-code');
+      $('agent-code').textContent = code;
+      $('agent-code-box').hidden = false;
+      say('agent-msg', 'Código nuevo generado. El anterior ya no vale.', 'ok');
+    } catch (err) {
+      say('agent-msg', err.message);
+    }
+  });
+  $('copy-code').addEventListener('click', async () => {
+    await navigator.clipboard.writeText($('agent-code').textContent);
+    say('agent-msg', 'Copiado.', 'ok');
+  });
+
+  $('password-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    try {
+      await api('POST', '/api/auth/password', { current: f.current.value, next: f.next.value });
+      f.reset();
+      say('password-msg', 'Contraseña cambiada.', 'ok');
+    } catch (err) {
+      say('password-msg', err.message);
+    }
+  });
+
+  start();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Postgres para desarrollo. En producción se usará el Postgres del servidor.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: contador
+      POSTGRES_PASSWORD: contador
+      POSTGRES_DB: contador
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - contador-db:/var/lib/postgresql/data
+
+volumes:
+  contador-db:
