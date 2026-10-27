@@ -14,10 +14,10 @@ apuntar nada a mano.
 │ Extensión navegador  │ ── pestaña activa ─▶│ Agente (Node, sin ventana) │
 │ (Chrome, Edge...)    │   127.0.0.1:5611    │                            │
 └──────────────────────┘                     │  Tracker ─▶ SQLite local   │
-┌──────────────────────┐  ventana activa,    │                            │
-│ PowerShell + API de  │ ── inactividad y ──▶│                            │
-│ Windows              │   chat de WhatsApp  └────────────────────────────┘
-└──────────────────────┘   cada 5 s
+┌──────────────────────┐  ventana activa,    │                │           │
+│ PowerShell + API de  │ ── inactividad y ──▶│                ▼           │
+│ Windows              │   chat de WhatsApp  │  Panel  127.0.0.1:5611     │
+└──────────────────────┘   cada 5 s          └────────────────────────────┘
 ```
 
 - **Ventana activa e inactividad**: cada 5 segundos se mira qué aplicación está
@@ -44,7 +44,23 @@ npm install
 npm start
 ```
 
-Para ver el resumen del día (en otra terminal, con el agente en marcha o no):
+### Panel
+
+Con el agente en marcha, abre el panel en su propia ventana (en otra terminal):
+
+```bash
+npm run panel
+```
+
+Muestra lo que estás haciendo ahora, el total del día y el tiempo por
+aplicación, web y chat de WhatsApp. Se actualiza solo cada 5 segundos y permite
+ver días anteriores. Se abre en modo aplicación de Edge, Chrome o Brave (sin
+pestañas ni barra de direcciones); también puedes abrir
+`http://127.0.0.1:5611` en cualquier navegador.
+
+### Resumen por consola
+
+Sin el agente en marcha también puedes ver el resumen del día:
 
 ```bash
 npm run report
@@ -63,7 +79,8 @@ Sin la extensión el agente funciona igual, pero no sabrá en qué dominio está
 ## Privacidad
 
 - Todo se guarda **solo en tu equipo**. El agente escucha únicamente en
-  `127.0.0.1`, así que nadie de la red puede conectarse a él.
+  `127.0.0.1`, así que nadie de la red puede conectarse a él, y rechaza
+  peticiones dirigidas a otro nombre de host, para que ninguna web pueda leer el panel.
 - Del navegador se guarda **solo el dominio** (`github.com`), nunca la URL
   completa ni el contenido de las páginas.
 - De WhatsApp se guarda **solo el nombre del chat** abierto, tal como aparece
@@ -78,21 +95,29 @@ Sin la extensión el agente funciona igual, pero no sabrá en qué dominio está
 agent/src/
   index.ts             arranque del agente
   report.ts            resumen por consola
+  open-panel.ts        abre el panel en su propia ventana
   config.ts            intervalos, umbral de inactividad, puerto, carpeta de datos
   core/
     types.ts           interfaces: WindowSource, BrowserSource, Segment...
     tracker.ts         convierte muestras en tramos continuos
+    day-range.ts       límites de un día en hora local
   storage/
     segment-store.ts   SQLite (node:sqlite, sin dependencias)
+  server/
+    local-server.ts    servidor local: extensión, panel y API del panel
+  ui/
+    panel.html         el panel (HTML, CSS y JS sin dependencias)
   sources/
     windows/           ventana activa, inactividad y chat de WhatsApp vía PowerShell
-    browser/           servidor local que recibe a la extensión
+    browser/           último dominio recibido de la extensión
 extension/             extensión Manifest V3 para navegadores Chromium
 ```
 
 **Preparado para migrar**: la única pieza que depende del sistema operativo es
 `WindowSource`. Para pasar a Tauri/Rust, o dar soporte a macOS, basta con otra
 implementación de esa interfaz; el tracker, el almacenamiento y la extensión no cambian.
+El panel es una página web normal, así que una futura app de Tauri o Electron
+podría mostrarlo tal cual en su ventana.
 
 ## Limitaciones conocidas
 

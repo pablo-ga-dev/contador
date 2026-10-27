@@ -73,6 +73,23 @@ export class SegmentStore {
     return rows.map((r) => ({ key: String(r.key), seconds: Number(r.seconds) }));
   }
 
+  /** El tramo más reciente, o null si no hay ninguno. */
+  latest(): Segment | null {
+    const row = this.db
+      .prepare('SELECT id, started_at, ended_at, app, title, domain, chat FROM segments ORDER BY id DESC LIMIT 1')
+      .get();
+    if (!row) return null;
+    return {
+      id: Number(row.id),
+      start: new Date(String(row.started_at)),
+      end: new Date(String(row.ended_at)),
+      app: String(row.app),
+      title: String(row.title),
+      domain: row.domain === null ? null : String(row.domain),
+      chat: row.chat === null ? null : String(row.chat),
+    };
+  }
+
   close(): void {
     this.db.close();
   }

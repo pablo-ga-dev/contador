@@ -6,8 +6,8 @@ export const config = {
   pollIntervalSeconds: 5,
   /** Sin tocar teclado ni ratón durante este tiempo, se deja de contar. */
   idleThresholdSeconds: 180,
-  /** Puerto local (solo 127.0.0.1) donde escuchamos a la extensión del navegador. */
-  browserPort: Number(process.env.CONTADOR_PORT ?? 5611),
+  /** Puerto local (solo 127.0.0.1) para la extensión del navegador y el panel. */
+  port: Number(process.env.CONTADOR_PORT ?? 5611),
   /** Si el navegador lleva este tiempo sin informar, su dominio se da por desconocido. */
   browserStaleSeconds: 90,
   /** Nombres de proceso que consideramos navegadores (en minúsculas). */
