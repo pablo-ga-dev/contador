@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ajustes · Contador</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  main { max-width: 640px; }
+  label { display: block; margin-bottom: 14px; color: var(--text-secondary); font-size: 13px; }
+  label input { margin-top: 4px; }
+  .help { margin: 0 0 16px; color: var(--text-secondary); }
+  .connected { margin-bottom: 16px; }
+  .row { display: flex; align-items: center; gap: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Contador</h1>
+  <nav>
+    <a href="/">Hoy</a>
+    <a href="/revisar">Revisar día</a>
+    <a href="/ajustes" aria-current="page">Ajustes</a>
+  </nav>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Conexión con la web</h2>
+    <p class="help">
+      Para enviar los días revisados, entra en la web del equipo, pulsa «Generar código»
+      en «Conectar el agente» y pégalo aquí. El código se guarda solo en este PC.
+    </p>
+    <div class="connected msg" id="state"></div>
+    <form id="form">
+      <label>Dirección de la web
+        <input type="url" name="webUrl" placeholder="https://contador.tuempresa.com" required>
+      </label>
+      <label>Código del agente
+        <input type="password" name="agentCode" autocomplete="off">
+      </label>
+      <div class="row">
+        <button class="primary" type="submit">Guardar y probar</button>
+        <span class="msg" id="msg"></span>
+      </div>
+    </form>
+  </section>
+</main>
+
+<script type="module">
+  import { api } from '/common.js';
+
+  const $ = (id) => document.getElementById(id);
+  const form = $('form');
+
+  function show(settings) {
+    form.webUrl.value = settings.webUrl ?? '';
+    form.agentCode.value = '';
+    form.agentCode.placeholder = settings.hasAgentCode ? 'Guardado (déjalo vacío para no cambiarlo)' : 'Pega aquí el código';
+    form.agentCode.required = !settings.hasAgentCode;
+    const state = $('state');
+    state.className = settings.userName ? 'connected msg ok' : 'connected msg';
+    state.textContent = settings.userName ? `✓ Conectado como ${settings.userName}` : 'Todavía no está conectado.';
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = $('msg');
+    msg.className = 'msg';
+    msg.textContent = 'Probando…';
+    try {
+      show(await api('PUT', '/api/settings', { webUrl: form.webUrl.value, agentCode: form.agentCode.value }));
+      msg.className = 'msg ok';
+      msg.textContent = 'Guardado. Los días pendientes se enviarán ahora.';
+    } catch (err) {
+      msg.className = 'msg error';
+      msg.textContent = err.message;
+    }
+  });
+
+  show(await api('GET', '/api/settings'));
+</script>
+</body>
+</html>

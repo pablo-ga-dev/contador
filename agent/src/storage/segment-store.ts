@@ -1,24 +1,22 @@
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync, type StatementSync } from 'node:sqlite';
-import type { Segment } from '../core/types.ts';
+import type { DatabaseSync, StatementSync } from 'node:sqlite';
+import type { Activity, ActivityKind, Segment } from '../core/types.ts';
 
 export interface Total {
   key: string;
   seconds: number;
 }
 
-/** Guarda los tramos en una base SQLite local (incluida en Node, sin dependencias). */
+const SECONDS = '(julianday(ended_at) - julianday(started_at)) * 86400';
+
+/** Guarda los tramos en la base SQLite local (incluida en Node, sin dependencias). */
 export class SegmentStore {
   private db: DatabaseSync;
   private insertStmt: StatementSync;
   private updateStmt: StatementSync;
 
-  constructor(file: string) {
-    mkdirSync(path.dirname(file), { recursive: true });
-    this.db = new DatabaseSync(file);
+  constructor(db: DatabaseSync) {
+    this.db = db;
     this.db.exec(`
-      PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS segments (
         id         INTEGER PRIMARY KEY,
         started_at TEXT NOT NULL,
@@ -63,7 +61,7 @@ export class SegmentStore {
     const rows = this.db
       .prepare(
         `SELECT ${field} AS key,
-                SUM((julianday(ended_at) - julianday(started_at)) * 86400) AS seconds
+                SUM(${SECONDS}) AS seconds
            FROM segments
           WHERE started_at >= ? AND started_at < ? AND ${field} IS NOT NULL
           GROUP BY ${field}
@@ -71,6 +69,44 @@ export class SegmentStore {
       )
       .all(from.toISOString(), to.toISOString());
     return rows.map((r) => ({ key: String(r.key), seconds: Number(r.seconds) }));
+  }
+
+  /**
+   * Tiempo entre `from` y `to` agrupado como se revisa: por dominio si es una web,
+   * por chat si es WhatsApp y, si no, por aplicación.
+   */
+  activities(from: Date, to: Date): Activity[] {
+    const rows = this.db
+      .prepare(
+        `SELECT CASE WHEN domain IS NOT NULL THEN 'domain'
+                     WHEN chat IS NOT NULL THEN 'chat'
+                     ELSE 'app' END AS kind,
+                COALESCE(domain, chat, app) AS key,
+                SUM(${SECONDS}) AS seconds
+           FROM segments
+          WHERE started_at >= ? AND started_at < ?
+          GROUP BY kind, key
+          ORDER BY seconds DESC`,
+      )
+      .all(from.toISOString(), to.toISOString());
+    return rows.map((r) => ({
+      kind: r.kind as ActivityKind,
+      key: String(r.key),
+      seconds: Math.round(Number(r.seconds)),
+    }));
+  }
+
+  /** Días (AAAA-MM-DD, hora local) con alguna actividad entre `from` y `to`. */
+  activeDates(from: Date, to: Date): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT date(started_at, 'localtime') AS day
+           FROM segments
+          WHERE started_at >= ? AND started_at < ?
+          ORDER BY day`,
+      )
+      .all(from.toISOString(), to.toISOString());
+    return rows.map((r) => String(r.day));
   }
 
   /** El tramo más reciente, o null si no hay ninguno. */
@@ -88,9 +124,5 @@ export class SegmentStore {
       domain: row.domain === null ? null : String(row.domain),
       chat: row.chat === null ? null : String(row.chat),
     };
-  }
-
-  close(): void {
-    this.db.close();
   }
 }

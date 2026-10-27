@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revisar día · Contador</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .head { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    border: 1px solid currentColor;
+  }
+  .badge.ok { color: var(--ok); }
+  .badge.warning { color: var(--warning); }
+  .badge.muted { color: var(--text-muted); }
+  .status-detail { color: var(--text-secondary); }
+  .pending { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .pending .label { color: var(--text-secondary); margin-right: 2px; }
+  .chip { padding: 2px 10px; border-radius: 999px; font-size: 13px; }
+  .chip.unsent { border-color: var(--warning); }
+
+  .totals { display: flex; gap: 8px 24px; flex-wrap: wrap; margin-bottom: 12px; }
+  .totals div { color: var(--text-secondary); }
+  .totals strong { color: var(--text-primary); font-weight: 600; margin-left: 4px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-size: 12px; font-weight: 600; color: var(--text-secondary);
+    padding: 8px 8px; border-bottom: 1px solid var(--border);
+  }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  td.time { text-align: right; white-space: nowrap; color: var(--text-secondary); width: 1%; }
+  td.assign { width: 300px; }
+  td.remember { width: 1%; text-align: center; }
+  th.time-h { text-align: right; }
+  th.remember-h { text-align: center; }
+  .activity { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .activity-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 460px; }
+  .kind {
+    flex: none; font-size: 11px; font-weight: 600; letter-spacing: .03em;
+    padding: 1px 6px; border-radius: 4px; background: var(--track); color: var(--text-secondary);
+  }
+  .members { margin: 4px 0 0 46px; color: var(--text-muted); font-size: 13px; }
+  .toggle { border: 0; padding: 0 4px; color: var(--accent); }
+
+  .pick {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    text-align: left; background: var(--surface-0);
+  }
+  .pick .value { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pick.client .value { font-weight: 600; }
+  .pick.personal .value, .pick.unassigned .value { color: var(--text-secondary); }
+  .pick .caret { color: var(--text-muted); flex: none; }
+
+  #picker {
+    position: absolute; z-index: 20; width: 320px;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: var(--shadow); padding: 8px;
+  }
+  #picker ul { list-style: none; margin: 8px 0 0; padding: 0; max-height: 280px; overflow: auto; }
+  #picker li { padding: 6px 8px; border-radius: 5px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  #picker li.active { background: var(--track); }
+  #picker li.separator { padding: 0; margin: 4px 0; border-top: 1px solid var(--border); cursor: default; }
+  #picker li .hint { color: var(--text-muted); font-size: 12px; }
+  #picker li.create { color: var(--accent); }
+  #picker .msg { margin-top: 6px; }
+
+  .actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 16px; }
+  .empty { color: var(--text-muted); padding: 24px 8px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Contador</h1>
+  <nav>
+    <a href="/">Hoy</a>
+    <a href="/revisar" aria-current="page">Revisar día</a>
+    <a href="/ajustes">Ajustes</a>
+  </nav>
+  <div class="day-nav">
+    <button id="prev" aria-label="Día anterior">◀</button>
+    <span id="day"></span>
+    <button id="next" aria-label="Día siguiente">▶</button>
+  </div>
+  <button id="today">Hoy</button>
+</header>
+
+<main>
+  <div class="banner" id="warning" hidden></div>
+
+  <div class="head">
+    <span class="badge" id="status"></span>
+    <span class="status-detail" id="status-detail"></span>
+    <div class="pending" id="pending"></div>
+  </div>
+
+  <section class="card">
+    <div class="totals" id="totals"></div>
+    <table id="table">
+      <thead>
+        <tr><th>Actividad</th><th class="time-h">Tiempo</th><th>Asignar a</th><th class="remember-h" title="Preseleccionar este cliente la próxima vez, para todo el equipo">Recordar</th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>No hay actividad registrada este día.</div>
+    <div class="actions">
+      <span class="msg" id="msg"></span>
+      <button class="primary" id="confirm">Confirmar y enviar</button>
+    </div>
+  </section>
+</main>
+
+<div id="picker" hidden>
+  <input type="search" id="picker-search" placeholder="Buscar o crear cliente…" autocomplete="off" maxlength="120">
+  <ul id="picker-list" role="listbox"></ul>
+  <div class="msg error" id="picker-msg"></div>
+</div>
+
+<script type="module">
+  import { api, appName, formatDuration, longDate, shiftDay, shortDate, todayISO } from '/common.js';
+
+  /** Las actividades más cortas que esto se agrupan en una sola fila. */
+  const SHORT_SECONDS = 30;
+  const KIND_LABELS = { domain: 'Web', chat: 'Chat', app: 'App' };
+  const FIXED = [
+    { bucket: 'personal', label: 'Personal', hint: 'No se envía' },
+    { bucket: 'unassigned', label: 'Sin cliente' },
+    { bucket: 'internal', label: 'Interno' },
+  ];
+  const FIXED_LABEL = Object.fromEntries(FIXED.map((f) => [f.bucket, f.label]));
+
+  const $ = (id) => document.getElementById(id);
+  let selected = new URLSearchParams(location.search).get('date') ?? todayISO();
+  let review = null;
+  let catalog = { clients: [], rules: [] };
+  /** Filas de la tabla: una por actividad, más una para las cortas agrupadas (con `members`). */
+  let rows = [];
+
+  const clientName = (id) => catalog.clients.find((c) => c.id === id)?.name ?? `Cliente #${id}`;
+  const choiceLabel = (row) => (row.bucket === 'client' ? clientName(row.clientId) : FIXED_LABEL[row.bucket]);
+  const activityLabel = (a) => (a.kind === 'app' ? appName(a.key) : a.key);
+
+  /** Lo ya confirmado ese día manda; si no, la regla del equipo; si no, "Sin cliente". */
+  function initialChoice(activity) {
+    const saved = review.confirmed?.items.find((i) => i.kind === activity.kind && i.key === activity.key);
+    if (saved) return { bucket: saved.bucket, clientId: saved.clientId, remember: saved.bucket !== 'client' || saved.remember };
+    const rule = catalog.rules.find((r) => r.kind === activity.kind && r.key === activity.key);
+    if (rule && catalog.clients.some((c) => c.id === rule.clientId)) {
+      return { bucket: 'client', clientId: rule.clientId, remember: true };
+    }
+    return { bucket: 'unassigned', clientId: null, remember: true };
+  }
+
+  function buildRows() {
+    const long = review.activities.filter((a) => a.seconds >= SHORT_SECONDS);
+    const short = review.activities.filter((a) => a.seconds < SHORT_SECONDS);
+    rows = long.map((a) => ({ ...a, ...initialChoice(a) }));
+    if (short.length > 0) {
+      const choices = short.map(initialChoice);
+      const same = choices.every((c) => c.bucket === choices[0].bucket && c.clientId === choices[0].clientId);
+      rows.push({
+        kind: 'group',
+        key: `${short.length} ${short.length === 1 ? 'actividad' : 'actividades'} de menos de ${SHORT_SECONDS} s`,
+        seconds: short.reduce((s, a) => s + a.seconds, 0),
+        members: short,
+        ...(same ? choices[0] : { bucket: 'unassigned', clientId: null }),
+        remember: false,
+      });
+    }
+  }
+
+  function render() {
+    renderStatus();
+    renderTotals();
+    const body = $('rows');
+    body.replaceChildren();
+    $('empty').hidden = rows.length > 0;
+    $('table').hidden = rows.length === 0;
+    $('confirm').disabled = rows.length === 0;
+    $('confirm').textContent = review.confirmed ? 'Volver a confirmar y enviar' : 'Confirmar y enviar';
+    rows.forEach((row) => body.append(renderRow(row)));
+  }
+
+  function renderRow(row) {
+    const tr = document.createElement('tr');
+
+    const tdName = document.createElement('td');
+    const activity = document.createElement('div');
+    activity.className = 'activity';
+    const kind = document.createElement('span');
+    kind.className = 'kind';
+    kind.textContent = row.members ? 'Varias' : KIND_LABELS[row.kind];
+    const name = document.createElement('span');
+    name.className = 'activity-name';
+    name.textContent = row.members ? row.key : activityLabel(row);
+    name.title = name.textContent;
+    activity.append(kind, name);
+    if (row.members) {
+      const toggle = document.createElement('button');
+      toggle.className = 'toggle';
+      toggle.textContent = 'ver';
+      const list = document.createElement('div');
+      list.className = 'members';
+      list.hidden = true;
+      list.textContent = row.members.map(activityLabel).join(' · ');
+      toggle.addEventListener('click', () => {
+        list.hidden = !list.hidden;
+        toggle.textContent = list.hidden ? 'ver' : 'ocultar';
+      });
+      activity.append(toggle);
+      tdName.append(activity, list);
+    } else {
+      tdName.append(activity);
+    }
+
+    const tdTime = document.createElement('td');
+    tdTime.className = 'time num';
+    tdTime.textContent = formatDuration(row.seconds);
+
+    const tdAssign = document.createElement('td');
+    tdAssign.className = 'assign';
+    const pick = document.createElement('button');
+    pick.className = `pick ${row.bucket}`;
+    const value = document.createElement('span');
+    value.className = 'value';
+    value.textContent = choiceLabel(row);
+    const caret = document.createElement('span');
+    caret.className = 'caret';
+    caret.textContent = '▾';
+    pick.append(value, caret);
+    pick.setAttribute('aria-label', `Asignar ${name.textContent}: ${value.textContent}`);
+    pick.addEventListener('click', () => openPicker(row, pick));
+    tdAssign.append(pick);
+
+    const tdRemember = document.createElement('td');
+    tdRemember.className = 'remember';
+    if (!row.members) {
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = row.bucket === 'client' && row.remember;
+      box.disabled = row.bucket !== 'client';
+      box.title = row.bucket === 'client'
+        ? 'Preseleccionar este cliente la próxima vez, para todo el equipo'
+        : 'Solo se recuerdan los clientes';
+      box.addEventListener('change', () => { row.remember = box.checked; });
+      tdRemember.append(box);
+    }
+
+    tr.append(tdName, tdTime, tdAssign, tdRemember);
+    return tr;
+  }
+
+  function renderTotals() {
+    const sum = (pred) => rows.filter(pred).reduce((s, r) => s + r.seconds, 0);
+    const parts = [
+      ['Total', sum(() => true)],
+      ['Clientes', sum((r) => r.bucket === 'client')],
+      ['Interno', sum((r) => r.bucket === 'internal')],
+      ['Sin cliente', sum((r) => r.bucket === 'unassigned')],
+      ['Personal', sum((r) => r.bucket === 'personal')],
+    ];
+    $('totals').replaceChildren(...parts.map(([label, seconds]) => {
+      const div = document.createElement('div');
+      const strong = document.createElement('strong');
+      strong.className = 'num';
+      strong.textContent = formatDuration(seconds);
+      div.append(label, strong);
+      return div;
+    }));
+  }
+
+  function renderStatus() {
+    const status = $('status');
+    const detail = $('status-detail');
+    const c = review.confirmed;
+    const time = (iso) => new Date(iso).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    if (!c) {
+      status.className = 'badge muted';
+      status.textContent = 'Sin confirmar';
+      detail.textContent = review.today ? 'El día aún no ha terminado: puedes confirmarlo ahora y volver a hacerlo más tarde.' : '';
+    } else if (c.sentAt) {
+      status.className = 'badge ok';
+      status.textContent = '✓ Enviado';
+      detail.textContent = `Enviado el ${time(c.sentAt)}.`;
+    } else {
+      status.className = 'badge warning';
+      status.textContent = 'Pendiente de envío';
+      detail.textContent = `Confirmado el ${time(c.confirmedAt)}. ${c.lastError ?? 'Se enviará en cuanto haya conexión.'}`;
+    }
+
+    const pending = $('pending');
+    pending.replaceChildren();
+    const unsent = review.pending.unsent.filter((d) => d.date !== selected);
+    const unconfirmed = review.pending.unconfirmed.filter((d) => d !== selected);
+    if (unconfirmed.length + unsent.length === 0) return;
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = 'Pendientes:';
+    pending.append(label);
+    for (const date of unconfirmed) pending.append(chip(date, shortDate(date), 'Sin confirmar'));
+    for (const d of unsent) pending.append(chip(d.date, `${shortDate(d.date)} ⚠`, d.error ?? 'Pendiente de envío', 'unsent'));
+  }
+
+  function chip(date, text, title, extra = '') {
+    const b = document.createElement('button');
+    b.className = `chip ${extra}`;
+    b.textContent = text;
+    b.title = title;
+    b.addEventListener('click', () => selectDay(date));
+    return b;
+  }
+
+  // --- Selector de cliente -------------------------------------------------
+
+  const picker = $('picker');
+  const search = $('picker-search');
+  let pickerRow = null;
+  let options = [];
+  let active = 0;
+
+  function openPicker(row, anchor) {
+    pickerRow = row;
+    const r = anchor.getBoundingClientRect();
+    picker.style.left = `${Math.min(r.left + scrollX, scrollX + innerWidth - 336)}px`;
+    picker.style.top = `${r.bottom + scrollY + 4}px`;
+    picker.hidden = false;
+    search.value = '';
+    $('picker-msg').textContent = '';
+    active = 0;
+    renderOptions();
+    search.focus();
+  }
+
+  function closePicker() {
+    picker.hidden = true;
+    pickerRow = null;
+  }
+
+  function renderOptions() {
+    const q = search.value.trim();
+    const ql = q.toLowerCase();
+    options = [
+      ...FIXED.filter((f) => !ql || f.label.toLowerCase().includes(ql)).map((f) => ({ ...f, clientId: null })),
+      { separator: true },
+      ...catalog.clients
+        .filter((c) => !ql || c.name.toLowerCase().includes(ql))
+        .map((c) => ({ bucket: 'client', clientId: c.id, label: c.name })),
+    ];
+    if (q && !catalog.clients.some((c) => c.name.toLowerCase() === ql)) {
+      options.push({ create: q, label: `+ Crear cliente «${q}»` });
+    }
+    // Al escribir, se activa la primera coincidencia (fijas incluidas), y "Crear" solo si no hay otra.
+    active = 0;
+
+    const list = $('picker-list');
+    list.replaceChildren();
+    let i = 0;
+    for (const o of options) {
+      const li = document.createElement('li');
+      if (o.separator) {
+        li.className = 'separator';
+        list.append(li);
+        continue;
+      }
+      const index = i++;
+      li.setAttribute('role', 'option');
+      if (index === active) li.classList.add('active');
+      if (o.create) li.classList.add('create');
+      li.append(o.label);
+      if (o.hint) {
+        const hint = document.createElement('span');
+        hint.className = 'hint';
+        hint.textContent = o.hint;
+        li.append(hint);
+      }
+      li.addEventListener('mousedown', (e) => { e.preventDefault(); choose(o); });
+      list.append(li);
+    }
+    if (catalog.clients.length === 0 && !q) {
+      const li = document.createElement('li');
+      li.className = 'hint';
+      li.textContent = 'Escribe un nombre para crear el primer cliente.';
+      list.append(li);
+    }
+  }
+
+  async function choose(option) {
+    const row = pickerRow;
+    if (!row) return;
+    if (option.create) {
+      try {
+        const client = await api('POST', '/api/clients', { name: option.create });
+        if (!catalog.clients.some((c) => c.id === client.id)) {
+          catalog.clients.push(client);
+          catalog.clients.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        }
+        option = { bucket: 'client', clientId: client.id };
+      } catch (err) {
+        $('picker-msg').textContent = err.message;
+        return;
+      }
+    }
+    row.bucket = option.bucket;
+    row.clientId = option.clientId;
+    // Si mientras se creaba el cliente se abrió el selector de otra fila, no lo cerramos.
+    if (pickerRow === row) closePicker();
+    render();
+  }
+
+  search.addEventListener('input', renderOptions);
+  search.addEventListener('keydown', (e) => {
+    const selectable = options.filter((o) => !o.separator);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      active = (active + (e.key === 'ArrowDown' ? 1 : -1) + selectable.length) % selectable.length;
+      const q = search.value;
+      renderOptionsKeepingActive(q);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (selectable[active]) choose(selectable[active]);
+    } else if (e.key === 'Escape') {
+      closePicker();
+    }
+  });
+  /** Repinta la lista sin recalcular la opción activa (al moverse con las flechas). */
+  function renderOptionsKeepingActive() {
+    const keep = active;
+    const list = $('picker-list');
+    [...list.querySelectorAll('li[role="option"]')].forEach((li, i) => li.classList.toggle('active', i === keep));
+    list.querySelector('li.active')?.scrollIntoView({ block: 'nearest' });
+  }
+  document.addEventListener('mousedown', (e) => {
+    if (!picker.hidden && !picker.contains(e.target)) closePicker();
+  });
+
+  // --- Carga y confirmación ------------------------------------------------
+
+  async function loadCatalog() {
+    catalog = await api('GET', '/api/catalog');
+    const warning = $('warning');
+    warning.replaceChildren();
+    if (catalog.notConfigured) {
+      const link = document.createElement('a');
+      link.href = '/ajustes';
+      link.textContent = 'Ajustes';
+      warning.append('Conecta el agente con la web en ', link, ' para elegir clientes y enviar el día.');
+    } else if (catalog.warning) {
+      warning.append(`${catalog.warning} Se usan los clientes guardados la última vez; el día se enviará cuando vuelva la conexión.`);
+    }
+    warning.hidden = warning.childNodes.length === 0;
+  }
+
+  async function selectDay(iso) {
+    selected = iso;
+    history.replaceState(null, '', `/revisar?date=${iso}`);
+    $('day').textContent = longDate(iso);
+    $('next').disabled = iso >= todayISO();
+    $('today').disabled = iso === todayISO();
+    $('msg').textContent = '';
+    try {
+      const data = await api('GET', `/api/review?date=${iso}`);
+      if (iso !== selected) return;
+      review = data;
+      buildRows();
+      render();
+    } catch (err) {
+      $('msg').className = 'msg error';
+      $('msg').textContent = err.message;
+    }
+  }
+
+  $('confirm').addEventListener('click', async () => {
+    const items = rows.flatMap((r) => (r.members
+      ? r.members.map((m) => ({ ...m, bucket: r.bucket, clientId: r.clientId, remember: false }))
+      : [{ kind: r.kind, key: r.key, seconds: r.seconds, bucket: r.bucket, clientId: r.clientId, remember: r.bucket === 'client' && r.remember }]));
+    const button = $('confirm');
+    button.disabled = true;
+    $('msg').className = 'msg';
+    $('msg').textContent = 'Enviando…';
+    try {
+      const date = selected;
+      const { confirmed } = await api('POST', `/api/review/${date}`, { items });
+      $('msg').className = confirmed.sentAt ? 'msg ok' : 'msg error';
+      $('msg').textContent = confirmed.sentAt ? 'Día confirmado y enviado.' : 'Guardado, pero aún no se ha podido enviar.';
+      const fresh = await api('GET', `/api/review?date=${date}`);
+      if (date === selected) {
+        review = fresh;
+        renderStatus();
+        $('confirm').textContent = 'Volver a confirmar y enviar';
+      }
+    } catch (err) {
+      $('msg').className = 'msg error';
+      $('msg').textContent = err.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('prev').addEventListener('click', () => selectDay(shiftDay(selected, -1)));
+  $('next').addEventListener('click', () => selectDay(shiftDay(selected, 1)));
+  $('today').addEventListener('click', () => selectDay(todayISO()));
+
+  await loadCatalog().catch((err) => {
+    $('warning').textContent = err.message;
+    $('warning').hidden = false;
+  });
+  selectDay(selected);
+</script>
+</body>
+</html>
