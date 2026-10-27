@@ -1,0 +1,19 @@
+{
+  "name": "contador",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Contabiliza automáticamente el tiempo dedicado a cada proyecto.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning agent/src/index.ts",
+    "report": "node --disable-warning=ExperimentalWarning agent/src/report.ts",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2"
+  }
+}
