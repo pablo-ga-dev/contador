@@ -30,6 +30,26 @@ export interface BrowserSource {
   latest(): BrowserSample | null;
 }
 
+/** Cómo se agrupa el tiempo al revisarlo: por web, por chat de WhatsApp o por aplicación. */
+export type ActivityKind = 'domain' | 'chat' | 'app';
+
+/** A qué se asigna una actividad al revisar el día. "personal" nunca sale del PC. */
+export type Bucket = 'client' | 'internal' | 'unassigned' | 'personal';
+
+export interface Activity {
+  kind: ActivityKind;
+  key: string;
+  seconds: number;
+}
+
+export interface Assignment extends Activity {
+  bucket: Bucket;
+  /** Solo cuando bucket es "client". */
+  clientId: number | null;
+  /** Guardar "esta actividad → este cliente" como regla del equipo. */
+  remember: boolean;
+}
+
 /** Tramo continuo haciendo lo mismo, tal como se guarda en la base de datos. */
 export interface Segment {
   id?: number;

@@ -3,10 +3,10 @@
 Contabiliza automáticamente el tiempo que dedicas a cada proyecto, sin tener que
 apuntar nada a mano.
 
-> **Estado.** El agente ya registra qué aplicación, qué dominio y qué chat de
-> WhatsApp usas, y durante cuánto tiempo, y lo muestra en un panel local. La web
-> compartida ya tiene usuarios, clientes y la API para recibir días confirmados;
-> falta la pantalla de revisión del día en el agente y los informes de la web.
+> **Estado.** El agente registra qué aplicación, qué dominio y qué chat de
+> WhatsApp usas, y durante cuánto tiempo, lo muestra en un panel local y te deja
+> revisar cada día (qué tiempo es de qué cliente) y enviarlo a la web compartida.
+> Faltan los informes de la web, los recordatorios y el despliegue.
 
 ## Cómo funciona
 
@@ -53,11 +53,26 @@ Con el agente en marcha, abre el panel en su propia ventana (en otra terminal):
 npm run panel
 ```
 
-Muestra lo que estás haciendo ahora, el total del día y el tiempo por
-aplicación, web y chat de WhatsApp. Se actualiza solo cada 5 segundos y permite
-ver días anteriores. Se abre en modo aplicación de Edge, Chrome o Brave (sin
-pestañas ni barra de direcciones); también puedes abrir
-`http://127.0.0.1:5611` en cualquier navegador.
+Se abre en modo aplicación de Edge, Chrome o Brave (sin pestañas ni barra de
+direcciones); también puedes abrir `http://127.0.0.1:5611` en cualquier navegador.
+Tiene tres páginas:
+
+- **Hoy**: lo que estás haciendo ahora, el total del día y el tiempo por
+  aplicación, web y chat de WhatsApp. Se actualiza cada 5 segundos, permite ver
+  días anteriores y avisa de los días sin confirmar.
+- **Revisar día**: una fila por web, chat o aplicación, con un selector con
+  buscador para asignarla a un cliente (o crear uno nuevo), a **Interno**, a
+  **Sin cliente** o a **Personal**. Las actividades de menos de 30 s van juntas
+  en una fila. Si una web o un chat ya se asignó antes a un cliente, aparece
+  preseleccionado (reglas compartidas por todo el equipo); la casilla
+  **Recordar** decide si se guarda la regla (desmárcala en webs genéricas como
+  github.com). **Confirmar y enviar** manda el día a la web; si no hay conexión
+  se guarda y se reintenta cada 10 minutos. Se puede volver a confirmar un día
+  para corregirlo.
+- **Ajustes**: dirección de la web y código del agente (se genera en la web, en
+  «Conectar el agente»).
+
+Lo marcado como **Personal** no sale nunca del PC.
 
 ### Resumen por consola
 
@@ -141,11 +156,19 @@ agent/src/
     tracker.ts         convierte muestras en tramos continuos
     day-range.ts       límites de un día en hora local
   storage/
-    segment-store.ts   SQLite (node:sqlite, sin dependencias)
+    database.ts        abre la base SQLite local (node:sqlite, sin dependencias)
+    segment-store.ts   tramos de actividad y sus totales
+    review-store.ts    ajustes y días confirmados (pendientes de enviar o enviados)
+  sync/
+    web-client.ts      llamadas a la web con el código del agente
+    day-sync.ts        envío de los días confirmados, con reintentos
   server/
-    local-server.ts    servidor local: extensión, panel y API del panel
-  ui/
-    panel.html         el panel (HTML, CSS y JS sin dependencias)
+    local-server.ts    servidor local: extensión, páginas del panel y su API
+  ui/                  páginas del panel (HTML, CSS y JS sin dependencias)
+    panel.html         Hoy
+    review.html        Revisar día
+    settings.html      Ajustes
+    style.css, common.js  estilos y utilidades compartidas
   sources/
     windows/           ventana activa, inactividad y chat de WhatsApp vía PowerShell
     browser/           último dominio recibido de la extensión
@@ -181,11 +204,9 @@ podría mostrarlo tal cual en su ventana.
 
 ## Próximos pasos
 
-1. Revisión del día en el panel del agente: cliente por actividad (con buscador
-   y alta), Interno, Sin cliente y Personal; preselección por reglas y envío a la web.
-2. Informes en la web: usuario × día y cliente × mes.
-3. Recordatorio 7 h 30 min después del primer encendido del día, revisión de
+1. Informes en la web: usuario × día y cliente × mes.
+2. Recordatorio 7 h 30 min después del primer encendido del día, revisión de
    días pendientes al encender y arranque del agente con Windows.
-4. Aviso al apagar el PC.
-5. Despliegue de la web en el servidor (HTTPS, `COOKIE_SECURE=true`).
-6. WhatsApp Web en el navegador: detectar el chat desde la extensión.
+3. Aviso al apagar el PC.
+4. Despliegue de la web en el servidor (HTTPS, `COOKIE_SECURE=true`).
+5. WhatsApp Web en el navegador: detectar el chat desde la extensión.

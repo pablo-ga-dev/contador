@@ -3,42 +3,78 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.ts';
 import { dayRange, localDate } from '../core/day-range.ts';
+import type { ActivityKind, Assignment, Bucket } from '../core/types.ts';
 import type { BrowserReceiver } from '../sources/browser/browser-receiver.ts';
+import type { ReviewStore } from '../storage/review-store.ts';
 import type { SegmentStore } from '../storage/segment-store.ts';
+import type { DaySync } from '../sync/day-sync.ts';
+import { WebError, type WebClient } from '../sync/web-client.ts';
 
-const PANEL_FILE = fileURLToPath(new URL('../ui/panel.html', import.meta.url));
-const MAX_BODY_BYTES = 4096;
+const UI_DIR = new URL('../ui/', import.meta.url);
+/** Páginas y recursos del panel: ruta → archivo y tipo. */
+const STATIC_FILES: Record<string, [string, string]> = {
+  '/': ['panel.html', 'text/html; charset=utf-8'],
+  '/revisar': ['review.html', 'text/html; charset=utf-8'],
+  '/ajustes': ['settings.html', 'text/html; charset=utf-8'],
+  '/style.css': ['style.css', 'text/css; charset=utf-8'],
+  '/common.js': ['common.js', 'text/javascript; charset=utf-8'],
+};
+const MAX_BODY_BYTES = 1024 * 1024;
 /** Un tramo cuyo final es más reciente que esto se considera "lo que estás haciendo ahora". */
 const CURRENT_MAX_AGE_MS = config.pollIntervalSeconds * 3 * 1000;
+/** Cuántos días hacia atrás se buscan días sin confirmar. */
+const PENDING_LOOKBACK_DAYS = 14;
+const KINDS: ActivityKind[] = ['domain', 'chat', 'app'];
+const BUCKETS: Bucket[] = ['client', 'internal', 'unassigned', 'personal'];
+
+class RequestError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+export interface LocalServerDeps {
+  port: number;
+  segments: SegmentStore;
+  reviews: ReviewStore;
+  browser: BrowserReceiver;
+  web: WebClient;
+  sync: DaySync;
+}
 
 /**
  * Servidor del agente, solo en 127.0.0.1:
- *   POST /browser       la extensión informa del dominio de la pestaña activa
- *   GET  /              panel con el tiempo del día
- *   GET  /api/summary   datos del panel (?date=AAAA-MM-DD, por defecto hoy)
+ *   POST /browser               la extensión informa del dominio de la pestaña activa
+ *   GET  /, /revisar, /ajustes  páginas del panel
+ *   GET  /api/summary           tiempo del día (?date=AAAA-MM-DD, por defecto hoy)
+ *   GET  /api/review            actividades del día, su revisión y los días pendientes
+ *   POST /api/review/:fecha     confirma un día y lo envía a la web
+ *   GET  /api/catalog           clientes y reglas de la web (o la última copia si no hay conexión)
+ *   POST /api/clients           crea un cliente en la web
+ *   GET|PUT /api/settings       conexión con la web
  */
 export class LocalServer {
   private server: http.Server | null = null;
-  private port: number;
-  private store: SegmentStore;
-  private browser: BrowserReceiver;
+  private deps: LocalServerDeps;
 
-  constructor(port: number, store: SegmentStore, browser: BrowserReceiver) {
-    this.port = port;
-    this.store = store;
-    this.browser = browser;
+  constructor(deps: LocalServerDeps) {
+    this.deps = deps;
   }
 
   start(): void {
     this.server = http.createServer((req, res) => {
       this.route(req, res).catch((err: unknown) => {
+        if (err instanceof RequestError) return sendJson(res, err.status, { error: err.message });
         console.error(`[servidor] ${err instanceof Error ? err.message : String(err)}`);
         if (!res.headersSent) res.writeHead(500);
         res.end();
       });
     });
     this.server.on('error', (err) => console.error(`[servidor] ${err.message}`));
-    this.server.listen(this.port, '127.0.0.1');
+    this.server.listen(this.deps.port, '127.0.0.1');
   }
 
   stop(): void {
@@ -50,20 +86,44 @@ export class LocalServer {
     // Solo atendemos peticiones dirigidas a nosotros: así una web maliciosa no puede
     // leer los datos haciéndose pasar por 127.0.0.1 ("DNS rebinding").
     const host = req.headers.host ?? '';
-    if (host !== `127.0.0.1:${this.port}` && host !== `localhost:${this.port}`) {
+    const { port } = this.deps;
+    if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) {
       res.writeHead(403).end();
       return;
     }
     const url = new URL(req.url ?? '/', `http://${host}`);
+    const method = req.method ?? 'GET';
 
-    if (req.method === 'POST' && url.pathname === '/browser') return this.browserReport(req, res);
-    if (req.method === 'GET' && url.pathname === '/') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(await readFile(PANEL_FILE));
+    if (method === 'POST' && url.pathname === '/browser') return this.browserReport(req, res);
+
+    // Protección CSRF: una web ajena puede enviarnos formularios, pero no JSON.
+    if (method !== 'GET' && !req.headers['content-type']?.startsWith('application/json')) {
+      throw new RequestError(415, 'Las peticiones deben enviarse como JSON.');
+    }
+
+    if (method === 'GET' && STATIC_FILES[url.pathname]) {
+      const [file, type] = STATIC_FILES[url.pathname]!;
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
+      res.end(await readFile(fileURLToPath(new URL(file, UI_DIR))));
       return;
     }
-    if (req.method === 'GET' && url.pathname === '/api/summary') {
-      return this.summary(url.searchParams.get('date') ?? undefined, res);
+    if (method === 'GET' && url.pathname === '/api/summary') {
+      return sendJson(res, 200, this.summary(url.searchParams.get('date') ?? undefined));
+    }
+    if (method === 'GET' && url.pathname === '/api/review') {
+      return sendJson(res, 200, this.review(url.searchParams.get('date') ?? undefined));
+    }
+    const confirm = /^\/api\/review\/(\d{4}-\d{2}-\d{2})$/.exec(url.pathname);
+    if (method === 'POST' && confirm) {
+      return sendJson(res, 200, await this.confirm(confirm[1]!, await readJson(req)));
+    }
+    if (method === 'GET' && url.pathname === '/api/catalog') return sendJson(res, 200, await this.catalog());
+    if (method === 'POST' && url.pathname === '/api/clients') {
+      return sendJson(res, 201, await this.createClient(await readJson(req)));
+    }
+    if (method === 'GET' && url.pathname === '/api/settings') return sendJson(res, 200, this.settings());
+    if (method === 'PUT' && url.pathname === '/api/settings') {
+      return sendJson(res, 200, await this.saveSettings(await readJson(req)));
     }
     res.writeHead(404).end();
   }
@@ -72,40 +132,23 @@ export class LocalServer {
    * Exige la cabecera X-Contador: una web normal no puede enviarla a otro origen
    * sin una comprobación previa (CORS) que aquí no aceptamos.
    */
-  private browserReport(req: http.IncomingMessage, res: http.ServerResponse): void {
+  private async browserReport(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     if (req.headers['x-contador'] !== '1') {
       res.writeHead(404).end();
       return;
     }
-    let body = '';
-    req.setEncoding('utf8');
-    req.on('data', (chunk: string) => {
-      body += chunk;
-      if (body.length > MAX_BODY_BYTES) req.destroy();
-    });
-    req.on('end', () => {
-      try {
-        const { domain } = JSON.parse(body) as { domain: unknown };
-        this.browser.record(typeof domain === 'string' && domain ? domain : null);
-        res.writeHead(204).end();
-      } catch {
-        res.writeHead(400).end();
-      }
-    });
+    const { domain } = await readJson(req);
+    this.deps.browser.record(typeof domain === 'string' && domain ? domain : null);
+    res.writeHead(204).end();
   }
 
-  private summary(date: string | undefined, res: http.ServerResponse): void {
-    const range = dayRange(date);
-    if (!range) {
-      res.writeHead(400).end();
-      return;
-    }
-    const { from, to } = range;
-    const byApp = this.store.totalsBy('app', from, to);
-    const latest = this.store.latest();
-    const now = Date.now();
+  private summary(date: string | undefined) {
+    const { from, to } = parseDay(date);
+    const { segments } = this.deps;
+    const byApp = segments.totalsBy('app', from, to);
+    const latest = segments.latest();
     const current =
-      latest && now - latest.end.getTime() <= CURRENT_MAX_AGE_MS
+      latest && Date.now() - latest.end.getTime() <= CURRENT_MAX_AGE_MS
         ? {
             app: latest.app,
             title: latest.title,
@@ -115,18 +158,173 @@ export class LocalServer {
             seconds: (latest.end.getTime() - latest.start.getTime()) / 1000,
           }
         : null;
-
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(
-      JSON.stringify({
-        date: localDate(from),
-        today: localDate(from) === localDate(new Date()),
-        totalSeconds: byApp.reduce((sum, t) => sum + t.seconds, 0),
-        byApp,
-        byDomain: this.store.totalsBy('domain', from, to),
-        byChat: this.store.totalsBy('chat', from, to),
-        current,
-      }),
-    );
+    return {
+      date: localDate(from),
+      today: localDate(from) === localDate(new Date()),
+      totalSeconds: byApp.reduce((sum, t) => sum + t.seconds, 0),
+      byApp,
+      byDomain: segments.totalsBy('domain', from, to),
+      byChat: segments.totalsBy('chat', from, to),
+      current,
+    };
   }
+
+  private review(date: string | undefined) {
+    const { from, to } = parseDay(date);
+    const day = localDate(from);
+    return {
+      date: day,
+      today: day === localDate(new Date()),
+      activities: this.deps.segments.activities(from, to),
+      confirmed: this.deps.reviews.get(day),
+      pending: this.pendingDays(),
+    };
+  }
+
+  /** Días recientes con actividad sin confirmar (sin contar hoy) y días confirmados sin enviar. */
+  private pendingDays() {
+    const today = parseDay(undefined).from;
+    const since = new Date(today);
+    since.setDate(since.getDate() - PENDING_LOOKBACK_DAYS);
+    const confirmed = this.deps.reviews.confirmedDates();
+    return {
+      unconfirmed: this.deps.segments.activeDates(since, today).filter((d) => !confirmed.has(d)),
+      unsent: this.deps.reviews.unsent().map((d) => ({ date: d.date, error: d.lastError })),
+    };
+  }
+
+  private async confirm(date: string, body: Record<string, unknown>) {
+    parseDay(date);
+    if (!Array.isArray(body.items)) throw new RequestError(400, 'Faltan las actividades (items).');
+    const items = body.items.map(parseAssignment);
+    this.deps.reviews.confirm(date, items);
+    await this.deps.sync.sendPending();
+    return { confirmed: this.deps.reviews.get(date) };
+  }
+
+  /** Clientes y reglas de la web. Si no hay conexión, la última copia que tengamos. */
+  private async catalog() {
+    const { web, reviews } = this.deps;
+    try {
+      const [clients, rules] = await Promise.all([web.clients(), web.rules()]);
+      reviews.setSetting('clientsCache', JSON.stringify(clients));
+      reviews.setSetting('rulesCache', JSON.stringify(rules));
+      return { clients, rules, warning: null };
+    } catch (err) {
+      if (!(err instanceof WebError)) throw err;
+      return {
+        clients: JSON.parse(reviews.getSetting('clientsCache') ?? '[]') as unknown[],
+        rules: JSON.parse(reviews.getSetting('rulesCache') ?? '[]') as unknown[],
+        warning: err.message,
+        notConfigured: err.kind === 'not-configured',
+      };
+    }
+  }
+
+  private async createClient(body: Record<string, unknown>) {
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!name) throw new RequestError(400, 'Falta el nombre del cliente.');
+    try {
+      return await this.deps.web.createClient(name);
+    } catch (err) {
+      if (err instanceof WebError) throw new RequestError(502, err.message);
+      throw err;
+    }
+  }
+
+  private settings() {
+    const { reviews } = this.deps;
+    return {
+      webUrl: reviews.getSetting('webUrl'),
+      hasAgentCode: reviews.getSetting('agentCode') !== null,
+      userName: reviews.getSetting('userName'),
+    };
+  }
+
+  /** Comprueba la conexión con los datos nuevos antes de guardarlos. */
+  private async saveSettings(body: Record<string, unknown>) {
+    const { reviews, web, sync } = this.deps;
+    const webUrl = parseWebUrl(body.webUrl);
+    const typedCode = typeof body.agentCode === 'string' ? body.agentCode.trim() : '';
+    const agentCode = typedCode || reviews.getSetting('agentCode');
+    if (!agentCode) throw new RequestError(400, 'Pega el código del agente que se genera en la web.');
+    try {
+      const me = await web.me({ webUrl, agentCode });
+      reviews.setSetting('webUrl', webUrl);
+      reviews.setSetting('agentCode', agentCode);
+      reviews.setSetting('userName', me.name);
+    } catch (err) {
+      if (err instanceof WebError) throw new RequestError(400, err.message);
+      throw err;
+    }
+    void sync.sendPending();
+    return this.settings();
+  }
+}
+
+function parseDay(date: string | undefined): { from: Date; to: Date } {
+  const range = dayRange(date);
+  if (!range) throw new RequestError(400, 'Fecha no válida (formato AAAA-MM-DD).');
+  return range;
+}
+
+function parseWebUrl(value: unknown): string {
+  try {
+    const url = new URL(String(value ?? '').trim());
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error();
+    return url.origin;
+  } catch {
+    throw new RequestError(400, 'La dirección de la web no es válida (p. ej. https://contador.tuempresa.com).');
+  }
+}
+
+function parseAssignment(raw: unknown, index: number): Assignment {
+  const where = `la actividad ${index + 1}`;
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  if (!KINDS.includes(r.kind as ActivityKind)) throw new RequestError(400, `${where}: tipo no válido.`);
+  if (!BUCKETS.includes(r.bucket as Bucket)) throw new RequestError(400, `${where}: asignación no válida.`);
+  if (typeof r.key !== 'string' || !r.key) throw new RequestError(400, `${where}: falta la clave.`);
+  if (typeof r.seconds !== 'number' || r.seconds < 0) throw new RequestError(400, `${where}: tiempo no válido.`);
+  const isClient = r.bucket === 'client';
+  if (isClient && typeof r.clientId !== 'number') throw new RequestError(400, `${where}: falta el cliente.`);
+  return {
+    kind: r.kind as ActivityKind,
+    key: r.key,
+    seconds: Math.round(r.seconds),
+    bucket: r.bucket as Bucket,
+    clientId: isClient ? (r.clientId as number) : null,
+    remember: isClient && r.remember === true,
+  };
+}
+
+function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk: string) => {
+      body += chunk;
+      if (body.length > MAX_BODY_BYTES) {
+        reject(new RequestError(413, 'Petición demasiado grande.'));
+        req.destroy();
+      }
+    });
+    req.on('end', () => {
+      try {
+        const parsed: unknown = JSON.parse(body);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          resolve(parsed as Record<string, unknown>);
+          return;
+        }
+      } catch {
+        // Se trata abajo.
+      }
+      reject(new RequestError(400, 'El cuerpo de la petición debe ser un objeto JSON.'));
+    });
+    req.on('error', reject);
+  });
+}
+
+function sendJson(res: http.ServerResponse, status: number, data: unknown): void {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(data));
 }

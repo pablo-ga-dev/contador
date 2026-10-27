@@ -4,6 +4,7 @@
 import path from 'node:path';
 import { config } from './config.ts';
 import { dayRange } from './core/day-range.ts';
+import { openDatabase } from './storage/database.ts';
 import { SegmentStore, type Total } from './storage/segment-store.ts';
 
 const arg = process.argv[2];
@@ -14,7 +15,8 @@ if (!range) {
 }
 const { from, to } = range;
 
-const store = new SegmentStore(path.join(config.dataDir, 'contador.db'));
+const db = openDatabase(path.join(config.dataDir, 'contador.db'));
+const store = new SegmentStore(db);
 
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -39,4 +41,4 @@ console.log(`Actividad del ${from.toLocaleDateString('es-ES')}: ${formatDuration
 print('Por aplicación', byApp);
 print('Por dominio', store.totalsBy('domain', from, to));
 print('Por chat de WhatsApp', store.totalsBy('chat', from, to));
-store.close();
+db.close();
