@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Contador",
+  "version": "0.1.0",
+  "description": "Envía al agente local de Contador el dominio de la pestaña activa (nunca la URL completa ni el contenido).",
+  "permissions": ["tabs", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
