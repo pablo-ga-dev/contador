@@ -27,8 +27,6 @@ export interface WindowSource {
 }
 
 export interface BrowserSource {
-  start(): void;
-  stop(): void;
   latest(): BrowserSample | null;
 }
 

@@ -3,17 +3,16 @@
 //      npm run report 2026-10-27 (un día concreto)
 import path from 'node:path';
 import { config } from './config.ts';
+import { dayRange } from './core/day-range.ts';
 import { SegmentStore, type Total } from './storage/segment-store.ts';
 
 const arg = process.argv[2];
-const from = arg ? new Date(`${arg}T00:00:00`) : new Date();
-if (Number.isNaN(from.getTime())) {
+const range = dayRange(arg);
+if (!range) {
   console.error(`Fecha no válida: ${arg} (formato AAAA-MM-DD)`);
   process.exit(1);
 }
-from.setHours(0, 0, 0, 0);
-const to = new Date(from);
-to.setDate(to.getDate() + 1);
+const { from, to } = range;
 
 const store = new SegmentStore(path.join(config.dataDir, 'contador.db'));
 

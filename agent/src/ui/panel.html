@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contador</title>
+<style>
+  :root {
+    --surface-0: #f4f4f2;
+    --surface-1: #fcfcfb;
+    --border: #e4e3df;
+    --track: #edece8;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #7a7974;
+    --bar: #2a78d6;
+    --live: #0ca30c;
+    --tooltip-bg: #1a1a19;
+    --tooltip-text: #f0efec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-0: #121211;
+      --surface-1: #1a1a19;
+      --border: #2c2c2a;
+      --track: #262624;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8f8e86;
+      --bar: #3987e5;
+      --live: #2fbf2f;
+      --tooltip-bg: #f0efec;
+      --tooltip-text: #1a1a19;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font: 14px/1.45 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-1);
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1; }
+  .day-nav { display: flex; align-items: center; gap: 4px; }
+  .day-nav span { min-width: 210px; text-align: center; font-weight: 500; }
+  button {
+    font: inherit; color: var(--text-primary);
+    background: transparent; border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: var(--track); }
+  button:disabled { opacity: .4; cursor: default; }
+
+  main { padding: 20px 24px 32px; max-width: 1200px; margin: 0 auto; }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card h2 {
+    margin: 0 0 12px; font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary);
+  }
+
+  .top { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .now { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); flex: none; }
+  .dot.live { background: var(--live); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .now-text { min-width: 0; }
+  .now-app { font-size: 16px; font-weight: 600; }
+  .now-detail { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .now-time { margin-left: auto; color: var(--text-secondary); flex: none; }
+  .hero { font-size: 32px; font-weight: 600; line-height: 1.1; }
+
+  .lists { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .rows { display: flex; flex-direction: column; gap: 10px; }
+  .row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px;
+    padding: 2px 0; position: relative;
+  }
+  .row-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-value { color: var(--text-secondary); text-align: right; }
+  .track { grid-column: 1 / -1; height: 8px; background: var(--track); border-radius: 4px; overflow: hidden; }
+  .bar { height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .row.other .bar { opacity: .45; }
+  .empty { color: var(--text-muted); padding: 8px 0; }
+
+  #tooltip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--tooltip-bg); color: var(--tooltip-text);
+    padding: 6px 10px; border-radius: 6px; font-size: 13px; max-width: 320px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  }
+  #tooltip strong { display: block; font-weight: 600; word-break: break-word; }
+
+  .error {
+    margin-bottom: 16px; padding: 12px 16px; border-radius: 10px;
+    border: 1px solid #ec835a; color: var(--text-primary); background: var(--surface-1);
+  }
+  .error[hidden] { display: none; }
+
+  @media (max-width: 900px) {
+    .lists { grid-template-columns: 1fr; }
+    .top { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Contador</h1>
+  <div class="day-nav">
+    <button id="prev" aria-label="Día anterior">◀</button>
+    <span id="day"></span>
+    <button id="next" aria-label="Día siguiente">▶</button>
+  </div>
+  <button id="today">Hoy</button>
+</header>
+
+<main>
+  <div class="error" id="error" hidden>
+    No se puede conectar con el agente. ¿Está en marcha? Arráncalo con <code>npm start</code>.
+  </div>
+
+  <div class="top">
+    <section class="card">
+      <h2>Ahora</h2>
+      <div class="now">
+        <div class="dot" id="now-dot"></div>
+        <div class="now-text">
+          <div class="now-app" id="now-app">—</div>
+          <div class="now-detail" id="now-detail"></div>
+        </div>
+        <div class="now-time num" id="now-time"></div>
+      </div>
+    </section>
+    <section class="card">
+      <h2 id="total-label">Total del día</h2>
+      <div class="hero num" id="total">—</div>
+    </section>
+  </div>
+
+  <div class="lists">
+    <section class="card"><h2>Aplicaciones</h2><div class="rows" id="apps"></div></section>
+    <section class="card"><h2>Webs</h2><div class="rows" id="domains"></div></section>
+    <section class="card"><h2>Chats de WhatsApp</h2><div class="rows" id="chats"></div></section>
+  </div>
+</main>
+
+<div id="tooltip" role="tooltip"></div>
+
+<script>
+  const REFRESH_MS = 5000;
+  const MAX_ROWS = 8;
+
+  // Nombres de proceso → nombre reconocible.
+  const APP_NAMES = {
+    'Code': 'VS Code', 'chrome': 'Chrome', 'msedge': 'Edge', 'firefox': 'Firefox', 'brave': 'Brave',
+    'WhatsApp.Root': 'WhatsApp', 'WhatsApp': 'WhatsApp', 'explorer': 'Explorador de archivos',
+    'WINWORD': 'Word', 'EXCEL': 'Excel', 'POWERPNT': 'PowerPoint', 'OUTLOOK': 'Outlook',
+    'olk': 'Outlook', 'ms-teams': 'Teams', 'Teams': 'Teams', 'Figma': 'Figma', 'Slack': 'Slack',
+    'Claude': 'Claude', 'WindowsTerminal': 'Terminal', 'powershell': 'PowerShell', 'pwsh': 'PowerShell',
+  };
+  const appName = (app) => APP_NAMES[app] ?? app;
+
+  function formatDuration(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (h > 0) return `${h} h ${String(m).padStart(2, '0')} min`;
+    if (m > 0 || seconds < 1) return `${m} min`;
+    return `${Math.floor(seconds)} s`;
+  }
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const toISODate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const todayISO = () => toISODate(new Date());
+  function shiftDay(iso, delta) {
+    const d = new Date(`${iso}T00:00:00`);
+    d.setDate(d.getDate() + delta);
+    return toISODate(d);
+  }
+
+  let selected = todayISO();
+  let totalSeconds = 0;
+
+  const $ = (id) => document.getElementById(id);
+  const tooltip = $('tooltip');
+
+  function renderRows(container, totals, label) {
+    container.replaceChildren();
+    if (totals.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'Sin datos';
+      container.append(empty);
+      return;
+    }
+    // Más allá de MAX_ROWS se agrupa en "Otros" para que la lista no crezca sin fin.
+    let rows = totals;
+    if (totals.length > MAX_ROWS) {
+      const rest = totals.slice(MAX_ROWS - 1);
+      rows = [...totals.slice(0, MAX_ROWS - 1), {
+        key: `Otros (${rest.length})`, seconds: rest.reduce((s, t) => s + t.seconds, 0), other: true,
+      }];
+    }
+    const max = Math.max(...rows.map((r) => r.seconds));
+    for (const r of rows) {
+      const row = document.createElement('div');
+      row.className = r.other ? 'row other' : 'row';
+      const name = r.other ? r.key : label(r.key);
+      const labelEl = document.createElement('div');
+      labelEl.className = 'row-label';
+      labelEl.textContent = name;
+      const value = document.createElement('div');
+      value.className = 'row-value num';
+      value.textContent = formatDuration(r.seconds);
+      const track = document.createElement('div');
+      track.className = 'track';
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.style.width = `${(r.seconds / max) * 100}%`;
+      track.append(bar);
+      row.append(labelEl, value, track);
+      row.addEventListener('mousemove', (e) => showTooltip(e, name, r.seconds));
+      row.addEventListener('mouseleave', hideTooltip);
+      container.append(row);
+    }
+  }
+
+  function showTooltip(e, name, seconds) {
+    const pct = totalSeconds > 0 ? Math.round((seconds / totalSeconds) * 100) : 0;
+    tooltip.replaceChildren();
+    const title = document.createElement('strong');
+    title.textContent = name;
+    tooltip.append(title, `${formatDuration(seconds)} · ${pct} % del día`);
+    tooltip.style.display = 'block';
+    const x = Math.min(e.clientX + 14, window.innerWidth - tooltip.offsetWidth - 8);
+    tooltip.style.left = `${x}px`;
+    tooltip.style.top = `${e.clientY + 14}px`;
+  }
+  function hideTooltip() { tooltip.style.display = 'none'; }
+
+  function renderNow(current, isToday) {
+    const dot = $('now-dot');
+    if (!isToday || !current) {
+      dot.classList.remove('live');
+      $('now-app').textContent = isToday ? 'Sin actividad' : '—';
+      $('now-detail').textContent = isToday ? 'No has tocado el teclado ni el ratón en un rato' : 'Solo disponible para hoy';
+      $('now-time').textContent = '';
+      return;
+    }
+    dot.classList.add('live');
+    $('now-app').textContent = appName(current.app);
+    $('now-detail').textContent = current.chat ?? current.domain ?? current.title;
+    $('now-time').textContent = formatDuration(current.seconds);
+  }
+
+  async function refresh() {
+    const day = selected;
+    try {
+      const res = await fetch(`/api/summary?date=${day}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      // Si mientras tanto se cambió de día, esta respuesta ya no vale.
+      if (day !== selected) return;
+      $('error').hidden = true;
+      totalSeconds = data.totalSeconds;
+      $('total').textContent = formatDuration(data.totalSeconds);
+      $('total-label').textContent = data.today ? 'Total de hoy' : 'Total del día';
+      renderNow(data.current, data.today);
+      renderRows($('apps'), data.byApp, appName);
+      renderRows($('domains'), data.byDomain, (k) => k);
+      renderRows($('chats'), data.byChat, (k) => k);
+    } catch {
+      $('error').hidden = false;
+    }
+  }
+
+  function selectDay(iso) {
+    selected = iso;
+    const d = new Date(`${iso}T00:00:00`);
+    const text = d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+    $('day').textContent = text.charAt(0).toUpperCase() + text.slice(1);
+    $('next').disabled = iso >= todayISO();
+    $('today').disabled = iso === todayISO();
+    refresh();
+  }
+
+  $('prev').addEventListener('click', () => selectDay(shiftDay(selected, -1)));
+  $('next').addEventListener('click', () => selectDay(shiftDay(selected, 1)));
+  $('today').addEventListener('click', () => selectDay(todayISO()));
+
+  setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+  selectDay(selected);
+</script>
+</body>
+</html>
