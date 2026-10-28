@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ajustes · Contador</title>
+<link rel="stylesheet" href="/app.css">
+<style>
+  main { max-width: 720px; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0 0 14px; }
+  .facts dt { color: var(--text-secondary); }
+  .facts dd { margin: 0; }
+  code.agent-code {
+    display: block; margin: 8px 0; padding: 10px; border-radius: 6px; word-break: break-all;
+    background: var(--surface-0); border: 1px dashed var(--border);
+    font: 13px/1.4 Consolas, "Cascadia Mono", monospace;
+  }
+  .buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <h2>Perfil</h2>
+    <form id="profile-form">
+      <label>Nombre <input name="name" maxlength="80" required autocomplete="name"></label>
+      <label>Email <input name="email" readonly></label>
+      <p class="muted" id="since"></p>
+      <button type="submit">Guardar</button>
+      <div class="msg" id="profile-msg"></div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Agente del PC</h2>
+    <dl class="facts" id="agent-facts"></dl>
+    <p>Genera un código y pégalo en <strong>Ajustes</strong> del panel del agente. Solo se muestra una vez; si generas otro, el anterior deja de valer.</p>
+    <div class="buttons">
+      <button id="agent-code-btn">Generar código</button>
+      <button class="danger" id="disconnect" hidden>Desconectar agente</button>
+    </div>
+    <div id="agent-code-box" hidden>
+      <code class="agent-code" id="agent-code"></code>
+      <button id="copy-code">Copiar</button>
+    </div>
+    <div class="msg" id="agent-msg"></div>
+  </section>
+
+  <section class="card">
+    <h2>Contraseña</h2>
+    <form id="password-form">
+      <label>Contraseña actual <input type="password" name="current" autocomplete="current-password" required></label>
+      <label>Contraseña nueva (mínimo 10 caracteres)
+        <input type="password" name="next" autocomplete="new-password" minlength="10" required></label>
+      <button type="submit">Cambiar contraseña</button>
+      <div class="msg" id="password-msg"></div>
+    </form>
+  </section>
+</main>
+<script type="module">
+  import { api, say, startPage } from '/app.js';
+
+  const $ = (id) => document.getElementById(id);
+  const fmt = (iso) => new Date(iso).toLocaleString('es-ES', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  function showProfile(p) {
+    const f = $('profile-form');
+    f.name.value = p.name;
+    f.email.value = p.email;
+    $('since').textContent = p.createdAt
+      ? `Miembro desde el ${new Date(p.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}.`
+      : '';
+    showAgent(p.agent);
+  }
+
+  function showAgent(agent) {
+    const facts = $('agent-facts');
+    facts.replaceChildren();
+    const add = (term, value) => {
+      const dt = document.createElement('dt');
+      dt.textContent = term;
+      const dd = document.createElement('dd');
+      dd.textContent = value;
+      facts.append(dt, dd);
+    };
+    if (!agent) {
+      add('Estado', 'Sin conectar');
+    } else {
+      add('Estado', agent.lastUsedAt ? 'Conectado' : 'Código generado, el agente aún no lo ha usado');
+      add('Código creado', fmt(agent.createdAt));
+      if (agent.lastUsedAt) add('Último contacto', fmt(agent.lastUsedAt));
+    }
+    $('disconnect').hidden = !agent;
+  }
+
+  $('profile-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const me = await api('PATCH', '/api/auth/profile', { name: e.target.name.value });
+      $('who').textContent = me.name;
+      say('profile-msg', 'Guardado.', 'ok');
+    } catch (err) {
+      say('profile-msg', err.message);
+    }
+  });
+
+  $('agent-code-btn').addEventListener('click', async () => {
+    try {
+      const { code } = await api('POST', '/api/auth/agent-code');
+      $('agent-code').textContent = code;
+      $('agent-code-box').hidden = false;
+      showAgent((await api('GET', '/api/auth/profile')).agent);
+      say('agent-msg', 'Código nuevo generado. El anterior ya no vale.', 'ok');
+    } catch (err) {
+      say('agent-msg', err.message);
+    }
+  });
+
+  $('copy-code').addEventListener('click', async () => {
+    await navigator.clipboard.writeText($('agent-code').textContent);
+    say('agent-msg', 'Copiado.', 'ok');
+  });
+
+  $('disconnect').addEventListener('click', async () => {
+    if (!confirm('El agente de tu PC dejará de poder enviar días hasta que generes un código nuevo. ¿Desconectar?')) return;
+    try {
+      await api('DELETE', '/api/auth/agent-code');
+      $('agent-code-box').hidden = true;
+      showAgent(null);
+      say('agent-msg', 'Agente desconectado.', 'ok');
+    } catch (err) {
+      say('agent-msg', err.message);
+    }
+  });
+
+  $('password-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    try {
+      await api('POST', '/api/auth/password', { current: f.current.value, next: f.next.value });
+      f.reset();
+      say('password-msg', 'Contraseña cambiada.', 'ok');
+    } catch (err) {
+      say('password-msg', err.message);
+    }
+  });
+
+  await startPage('/ajustes');
+  showProfile(await api('GET', '/api/auth/profile'));
+</script>
+</body>
+</html>

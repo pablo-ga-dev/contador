@@ -9,9 +9,17 @@ import { HttpError } from './http.ts';
 import { authRoutes } from './routes/auth.ts';
 import { clientRoutes } from './routes/clients.ts';
 import { dayRoutes } from './routes/days.ts';
+import { reportRoutes } from './routes/reports.ts';
 import { ruleRoutes } from './routes/rules.ts';
 
 const publicDir = fileURLToPath(new URL('../public', import.meta.url));
+/** Páginas de la web: ruta → archivo en public/. */
+const PAGES: Record<string, string> = {
+  '/': 'index.html',
+  '/login': 'login.html',
+  '/clientes': 'clientes.html',
+  '/ajustes': 'ajustes.html',
+};
 
 const app = new Hono<AppEnv>();
 
@@ -29,7 +37,11 @@ app.route('/api/auth', authRoutes);
 app.route('/api/clients', clientRoutes);
 app.route('/api/rules', ruleRoutes);
 app.route('/api/days', dayRoutes);
+app.route('/api/reports', reportRoutes);
 app.all('/api/*', (c) => c.json({ error: 'No existe.' }, 404));
+for (const [route, file] of Object.entries(PAGES)) {
+  app.get(route, serveStatic({ root: publicDir, path: file }));
+}
 app.use('/*', serveStatic({ root: publicDir }));
 
 app.onError((err, c) => {

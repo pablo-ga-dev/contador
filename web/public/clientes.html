@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clientes · Contador</title>
+<link rel="stylesheet" href="/app.css">
+<style>
+  main { max-width: 720px; }
+  .clients { list-style: none; margin: 12px 0 0; padding: 0; }
+  .clients li { padding: 8px 4px; border-top: 1px solid var(--border); }
+  .clients li:first-child { border-top: 0; }
+</style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <h2>Clientes</h2>
+    <form class="row" id="form">
+      <input name="client" placeholder="Buscar o crear cliente…" autocomplete="off" maxlength="120">
+      <button class="primary" type="submit">Nuevo</button>
+    </form>
+    <div class="msg" id="msg"></div>
+    <ul class="clients" id="clients"></ul>
+  </section>
+</main>
+<script type="module">
+  import { api, say, startPage } from '/app.js';
+
+  const form = document.getElementById('form');
+  let clients = [];
+
+  function render() {
+    const query = form.client.value.trim().toLowerCase();
+    const shown = clients.filter((c) => c.name.toLowerCase().includes(query));
+    const list = document.getElementById('clients');
+    list.replaceChildren();
+    if (shown.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'muted';
+      li.textContent = clients.length === 0 ? 'Todavía no hay clientes.' : 'Ningún cliente coincide. Pulsa «Nuevo» para crearlo.';
+      list.append(li);
+    }
+    for (const c of shown) {
+      const li = document.createElement('li');
+      li.textContent = c.name;
+      list.append(li);
+    }
+  }
+
+  form.client.addEventListener('input', render);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const created = await api('POST', '/api/clients', { name: form.client.value });
+      if (!clients.some((c) => c.id === created.id)) clients.push(created);
+      clients.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      form.client.value = '';
+      render();
+      say('msg', `Cliente «${created.name}» listo.`, 'ok');
+    } catch (err) {
+      say('msg', err.message);
+    }
+  });
+
+  await startPage('/clientes');
+  clients = await api('GET', '/api/clients');
+  render();
+</script>
+</body>
+</html>

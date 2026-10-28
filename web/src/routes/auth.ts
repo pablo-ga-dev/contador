@@ -56,6 +56,26 @@ authRoutes.post('/logout', async (c) => {
 
 authRoutes.get('/me', requireUser, (c) => c.json(c.get('user')));
 
+/** Datos del usuario para la página de Ajustes, incluido el estado de su agente. */
+authRoutes.get('/profile', requireUser, async (c) => {
+  const user = c.get('user');
+  const [row] = await sql<{ created_at: Date }[]>`SELECT created_at FROM users WHERE id = ${user.id}`;
+  const [agent] = await sql<{ created_at: Date; last_used_at: Date | null }[]>`
+    SELECT created_at, last_used_at FROM agent_tokens WHERE user_id = ${user.id}`;
+  return c.json({
+    ...user,
+    createdAt: row?.created_at ?? null,
+    agent: agent ? { createdAt: agent.created_at, lastUsedAt: agent.last_used_at } : null,
+  });
+});
+
+authRoutes.patch('/profile', requireUser, async (c) => {
+  const name = text((await jsonBody(c)).name, 'el nombre', 80);
+  const user = c.get('user');
+  await sql`UPDATE users SET name = ${name} WHERE id = ${user.id}`;
+  return c.json({ ...user, name });
+});
+
 authRoutes.post('/password', requireUser, async (c) => {
   const body = await jsonBody(c);
   const current = text(body.current, 'la contraseña actual');
@@ -84,4 +104,10 @@ authRoutes.post('/agent-code', requireUser, async (c) => {
     await tx`INSERT INTO agent_tokens (token_hash, user_id) VALUES (${hashToken(code)}, ${user.id})`;
   });
   return c.json({ code });
+});
+
+/** Desconecta el agente: su código deja de valer. */
+authRoutes.delete('/agent-code', requireUser, async (c) => {
+  await sql`DELETE FROM agent_tokens WHERE user_id = ${c.get('user').id}`;
+  return c.body(null, 204);
 });
