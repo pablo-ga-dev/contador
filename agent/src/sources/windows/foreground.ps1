@@ -1,6 +1,6 @@
 # Cada N segundos escribe una línea JSON con la ventana activa, los segundos
 # sin actividad de teclado/ratón y, si es WhatsApp, el chat abierto.
-# Lo lanza windows-window-source.ts.
+# Lo lanza window-source.ts.
 param(
   [int]$IntervalSeconds = 5,
   [int]$ParentPid = 0

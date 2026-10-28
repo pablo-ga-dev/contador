@@ -11,7 +11,7 @@
     "start": "node --disable-warning=ExperimentalWarning agent/src/index.ts",
     "report": "node --disable-warning=ExperimentalWarning agent/src/report.ts",
     "panel": "node agent/src/open-panel.ts",
-    "arrancar": "powershell -NoProfile -ExecutionPolicy Bypass -File agent/scripts/start-hidden.ps1",
+    "arrancar": "node agent/src/start.ts",
     "parar": "node agent/src/stop.ts",
     "fuentes": "node scripts/fuentes.ts",
     "typecheck": "tsc"
