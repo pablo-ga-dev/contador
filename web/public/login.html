@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar · Contador</title>
+<link rel="stylesheet" href="/app.css">
+<style>
+  .login { max-width: 360px; margin: 12vh auto 0; }
+  .login h2 { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--text-primary); }
+</style>
+</head>
+<body>
+<form class="card login" id="form">
+  <h2>Contador</h2>
+  <label>Email <input type="email" name="email" autocomplete="username" required></label>
+  <label>Contraseña <input type="password" name="password" autocomplete="current-password" required></label>
+  <button class="primary" type="submit">Entrar</button>
+  <div class="msg" id="msg"></div>
+</form>
+<script type="module">
+  import { api, say } from '/app.js';
+
+  // Solo rutas propias: evita que un enlace manipulado nos mande a otra web tras entrar.
+  const next = new URLSearchParams(location.search).get('next');
+  const target = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+
+  document.getElementById('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    try {
+      await api('POST', '/api/auth/login', { email: f.email.value, password: f.password.value });
+      location.href = target;
+    } catch (err) {
+      say('msg', err.message);
+    }
+  });
+</script>
+</body>
+</html>

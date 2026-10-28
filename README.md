@@ -119,10 +119,17 @@ Para parar la base de datos: `npm run db:down` (los datos se conservan).
 
 ### Qué hace ya
 
-- Inicio de sesión, cambio de contraseña y alta de usuarios por comando.
-- Clientes: lista con buscador y alta (sin duplicados, aunque cambien mayúsculas).
-- **Código del agente**: se genera en la web y lo usará el agente del PC para
-  enviar los días. Solo se muestra una vez y generar otro invalida el anterior.
+- **Tiempos** (página principal), con dos vistas:
+  - *Por persona y día*: una semana con el tiempo confirmado de cada persona
+    cada día; al pulsar un día se ve por cliente, con sus webs, chats y apps.
+  - *Por cliente y mes*: el total de cada cliente (y de Interno y Sin cliente)
+    con el reparto por persona; al pulsar uno se ven sus actividades, personas y días.
+  De momento todo el equipo ve los tiempos de todos.
+- **Clientes**: lista con buscador y alta (sin duplicados, aunque cambien mayúsculas).
+- **Ajustes**: nombre, email, contraseña y el **agente del PC**: generar su
+  código (se muestra una vez y generar otro invalida el anterior), ver cuándo
+  contactó por última vez y desconectarlo.
+- Inicio de sesión (vuelve a la página que ibas a abrir) y alta de usuarios por comando.
 - API para el agente:
   - `GET /api/clients` y `GET /api/rules` (qué cliente se preselecciona para
     cada dominio, chat o app; compartidas por todo el equipo).

@@ -3,271 +3,299 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contador</title>
+<title>Tiempos · Contador</title>
+<link rel="stylesheet" href="/app.css">
 <style>
-  :root {
-    --surface-0: #f4f4f2;
-    --surface-1: #fcfcfb;
-    --border: #e4e3df;
-    --hover: #edece8;
-    --text-primary: #0b0b0b;
-    --text-secondary: #52514e;
-    --text-muted: #7a7974;
-    --accent: #2a78d6;
-    --accent-text: #ffffff;
-    --danger: #c43d3c;
-    --ok: #0c8a0c;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --surface-0: #121211;
-      --surface-1: #1a1a19;
-      --border: #2c2c2a;
-      --hover: #262624;
-      --text-primary: #f0efec;
-      --text-secondary: #c3c2b7;
-      --text-muted: #8f8e86;
-      --accent: #3987e5;
-      --danger: #e66767;
-      --ok: #2fbf2f;
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--surface-0); color: var(--text-primary);
-    font: 14px/1.45 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  }
-  [hidden] { display: none !important; }
-  header {
-    display: flex; align-items: center; gap: 16px; padding: 14px 24px;
-    background: var(--surface-1); border-bottom: 1px solid var(--border);
-  }
-  header h1 { margin: 0; font-size: 18px; font-weight: 600; flex: 1; }
-  header .who { color: var(--text-secondary); }
-  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 40px; }
-  .grid { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; align-items: start; }
-  .stack { display: flex; flex-direction: column; gap: 16px; }
-  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
-  .card h2 {
-    margin: 0 0 12px; font-size: 12px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary);
-  }
-  .card p { margin: 0 0 12px; color: var(--text-secondary); }
-  label { display: block; margin-bottom: 10px; color: var(--text-secondary); font-size: 13px; }
-  input {
-    display: block; width: 100%; margin-top: 4px; padding: 7px 10px;
-    font: inherit; color: var(--text-primary); background: var(--surface-0);
-    border: 1px solid var(--border); border-radius: 6px;
-  }
-  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  button {
-    font: inherit; padding: 7px 14px; border-radius: 6px; cursor: pointer;
-    border: 1px solid var(--border); background: transparent; color: var(--text-primary);
-  }
-  button:hover { background: var(--hover); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-  button.primary:hover { filter: brightness(1.08); }
-  .row { display: flex; gap: 8px; align-items: center; }
-  .row input { margin-top: 0; }
-  .msg { min-height: 1.4em; margin-top: 8px; font-size: 13px; }
-  .msg.error { color: var(--danger); }
-  .msg.ok { color: var(--ok); }
+  .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 
-  .login { max-width: 360px; margin: 10vh auto 0; }
-  .login h2 { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--text-primary); }
-
-  .clients { list-style: none; margin: 12px 0 0; padding: 0; max-height: 420px; overflow: auto; }
-  .clients li { padding: 8px 4px; border-top: 1px solid var(--border); }
-  .clients li:first-child { border-top: 0; }
-  .muted { color: var(--text-muted); }
-  code.agent-code {
-    display: block; margin: 8px 0; padding: 10px; border-radius: 6px; word-break: break-all;
-    background: var(--surface-0); border: 1px dashed var(--border);
-    font: 13px/1.4 Consolas, "Cascadia Mono", monospace;
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: 0; }
+  th.day, td.day, th.total, td.total { text-align: right; white-space: nowrap; }
+  th.today { color: var(--accent); }
+  td.total { font-weight: 600; }
+  .cell {
+    width: 100%; text-align: right; border: 0; padding: 6px 8px; border-radius: 6px;
+    font-variant-numeric: tabular-nums;
   }
-  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .cell.none { color: var(--text-muted); }
+  .cell[aria-pressed="true"] { background: var(--hover); outline: 1px solid var(--accent); }
+
+  .clients-list { display: flex; flex-direction: column; }
+  .client-row {
+    /* Columnas fijas: así todas las barras empiezan en el mismo sitio y se comparan bien. */
+    display: grid; grid-template-columns: 200px 1fr 110px; gap: 4px 16px; align-items: center;
+    width: 100%; text-align: left; border: 0; border-radius: 6px; padding: 10px 8px;
+  }
+  .client-row + .client-row { border-top: 1px solid var(--border); border-radius: 0; }
+  .client-row[aria-pressed="true"] { background: var(--hover); }
+  .client-row .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .client-row.bucket .name { font-weight: 400; color: var(--text-secondary); }
+  .client-row .people { grid-column: 1 / -1; color: var(--text-muted); font-size: 13px; }
+  .client-row > .num { text-align: right; }
+  .track { height: 8px; background: var(--track); border-radius: 4px; overflow: hidden; }
+  .bar { height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .client-row.bucket .bar { opacity: .45; }
+
+  .detail-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  .detail-head h3 { margin: 0; font-size: 16px; }
+  .detail-cols { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 24px; }
+  .detail-cols h4 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; }
+  .lines { list-style: none; margin: 0; padding: 0; }
+  .lines li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .lines .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lines .value { color: var(--text-secondary); white-space: nowrap; }
+  .group { margin-bottom: 14px; }
+  .group-title { display: flex; justify-content: space-between; font-weight: 600; padding: 4px 0; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  .group-title.bucket { font-weight: 400; color: var(--text-secondary); }
+  .group .lines { padding-left: 4px; }
+
+  @media (max-width: 800px) {
+    .detail-cols { grid-template-columns: 1fr; }
+    .client-row { grid-template-columns: 120px 1fr 90px; }
+    .table-scroll { overflow-x: auto; }
+  }
 </style>
 </head>
 <body>
-
-<section id="login-view" hidden>
-  <form class="card login" id="login-form">
-    <h2>Contador</h2>
-    <label>Email <input type="email" name="email" autocomplete="username" required></label>
-    <label>Contraseña <input type="password" name="password" autocomplete="current-password" required></label>
-    <button class="primary" type="submit">Entrar</button>
-    <div class="msg" id="login-msg"></div>
-  </form>
-</section>
-
-<section id="app-view" hidden>
-  <header>
-    <h1>Contador</h1>
-    <span class="who" id="who"></span>
-    <button id="logout">Salir</button>
-  </header>
-  <main class="grid">
-    <section class="card">
-      <h2>Clientes</h2>
-      <form class="row" id="client-form">
-        <input name="client" placeholder="Buscar o crear cliente…" autocomplete="off" maxlength="120">
-        <button class="primary" type="submit">Nuevo</button>
-      </form>
-      <div class="msg" id="client-msg"></div>
-      <ul class="clients" id="clients"></ul>
-    </section>
-
-    <div class="stack">
-      <section class="card">
-        <h2>Conectar el agente</h2>
-        <p>Genera un código y pégalo en el panel del agente de tu PC. Solo se muestra una vez; si generas otro, el anterior deja de valer.</p>
-        <button id="agent-code-btn">Generar código</button>
-        <div id="agent-code-box" hidden>
-          <code class="agent-code" id="agent-code"></code>
-          <button id="copy-code">Copiar</button>
-        </div>
-        <div class="msg" id="agent-msg"></div>
-      </section>
-
-      <section class="card">
-        <h2>Cambiar contraseña</h2>
-        <form id="password-form">
-          <label>Contraseña actual <input type="password" name="current" autocomplete="current-password" required></label>
-          <label>Contraseña nueva (mínimo 10 caracteres)
-            <input type="password" name="next" autocomplete="new-password" minlength="10" required></label>
-          <button type="submit">Cambiar</button>
-          <div class="msg" id="password-msg"></div>
-        </form>
-      </section>
+<main>
+  <div class="toolbar">
+    <div class="tabs" role="group" aria-label="Vista">
+      <button id="tab-person" aria-pressed="true">Por persona y día</button>
+      <button id="tab-client" aria-pressed="false">Por cliente y mes</button>
     </div>
-  </main>
-</section>
+    <div class="period">
+      <button id="prev" aria-label="Anterior">◀</button>
+      <span id="period"></span>
+      <button id="next" aria-label="Siguiente">▶</button>
+      <button id="now">Actual</button>
+    </div>
+  </div>
 
-<script>
+  <section class="card" id="person-view">
+    <div class="table-scroll"><table id="week"></table></div>
+    <p class="muted" id="week-empty" hidden>Todavía no hay usuarios.</p>
+  </section>
+
+  <section class="card" id="client-view" hidden>
+    <div class="clients-list" id="month"></div>
+    <p class="empty" id="month-empty" hidden>Nadie ha confirmado tiempo este mes.</p>
+  </section>
+
+  <section class="card" id="detail" hidden></section>
+  <div class="msg error" id="msg"></div>
+</main>
+
+<script type="module">
+  import {
+    KIND_LABELS, activityLabel, addDays, addMonths, api, capitalize, el, fmtDate, formatDuration,
+    groupLabel, mondayOf, monthLabel, startPage, todayISO,
+  } from '/app.js';
+
   const $ = (id) => document.getElementById(id);
-  let clients = [];
+  const params = new URLSearchParams(location.search);
+  const state = {
+    view: params.get('vista') === 'cliente' ? 'client' : 'person',
+    week: mondayOf(params.get('semana') ?? todayISO()),
+    month: params.get('mes') ?? todayISO().slice(0, 7),
+  };
 
-  async function api(method, path, body) {
-    // El servidor exige JSON en todo lo que no sea GET (protección CSRF).
-    const send = method !== 'GET';
-    const res = await fetch(path, {
-      method,
-      headers: send ? { 'Content-Type': 'application/json' } : {},
-      body: send ? JSON.stringify(body ?? {}) : undefined,
-    });
-    const data = res.status === 204 ? null : await res.json().catch(() => null);
-    if (!res.ok) {
-      const err = new Error(data?.error ?? `Error ${res.status}`);
-      err.status = res.status;
-      throw err;
-    }
-    return data;
+  function saveUrl() {
+    const q = state.view === 'client' ? `vista=cliente&mes=${state.month}` : `semana=${state.week}`;
+    history.replaceState(null, '', `/?${q}`);
   }
 
-  function say(id, text, kind = 'error') {
-    const el = $(id);
-    el.textContent = text;
-    el.className = `msg ${kind}`;
+  function setView(view) {
+    state.view = view;
+    $('tab-person').setAttribute('aria-pressed', String(view === 'person'));
+    $('tab-client').setAttribute('aria-pressed', String(view === 'client'));
+    $('person-view').hidden = view !== 'person';
+    $('client-view').hidden = view !== 'client';
+    $('detail').hidden = true;
+    load();
   }
 
-  async function start() {
+  function shift(n) {
+    if (state.view === 'person') state.week = addDays(state.week, 7 * n);
+    else state.month = addMonths(state.month, n);
+    $('detail').hidden = true;
+    load();
+  }
+
+  async function load() {
+    saveUrl();
+    $('msg').textContent = '';
     try {
-      const me = await api('GET', '/api/auth/me');
-      showApp(me);
+      if (state.view === 'person') await loadWeek();
+      else await loadMonth();
     } catch (err) {
-      if (err.status !== 401) say('login-msg', err.message);
-      $('login-view').hidden = false;
-      $('app-view').hidden = true;
+      $('msg').textContent = err.message;
     }
   }
 
-  async function showApp(me) {
-    $('who').textContent = me.name;
-    $('login-view').hidden = true;
-    $('app-view').hidden = false;
-    clients = await api('GET', '/api/clients');
-    renderClients();
+  // --- Por persona y día ---------------------------------------------------
+
+  async function loadWeek() {
+    const end = addDays(state.week, 6);
+    $('period').textContent = `Del ${fmtDate(state.week, { day: 'numeric', month: 'short' })} al ${fmtDate(end, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    $('next').disabled = state.week >= mondayOf(todayISO());
+    $('now').disabled = state.week === mondayOf(todayISO());
+    const data = await api('GET', `/api/reports/week?start=${state.week}`);
+    const table = $('week');
+    table.replaceChildren();
+    $('week-empty').hidden = data.users.length > 0;
+    if (data.users.length === 0) return;
+
+    const head = el('tr');
+    head.append(el('th', '', 'Persona'));
+    for (const d of data.days) {
+      const th = el('th', `day${d === todayISO() ? ' today' : ''}`, capitalize(fmtDate(d, { weekday: 'short', day: 'numeric' })));
+      head.append(th);
+    }
+    head.append(el('th', 'total', 'Total'));
+    table.append(head);
+
+    for (const user of data.users) {
+      const tr = el('tr');
+      tr.append(el('td', '', user.name));
+      let total = 0;
+      for (const d of data.days) {
+        const td = el('td', 'day');
+        const t = user.days[d];
+        const seconds = t ? t.client + t.internal + t.unassigned : 0;
+        total += seconds;
+        const cell = el('button', t ? 'cell' : 'cell none', t ? formatDuration(seconds) : '—');
+        cell.title = t
+          ? `Clientes ${formatDuration(t.client)} · Interno ${formatDuration(t.internal)} · Sin cliente ${formatDuration(t.unassigned)}`
+          : 'Sin confirmar';
+        cell.setAttribute('aria-pressed', 'false');
+        cell.disabled = !t;
+        cell.addEventListener('click', () => {
+          table.querySelectorAll('.cell[aria-pressed="true"]').forEach((c) => c.setAttribute('aria-pressed', 'false'));
+          cell.setAttribute('aria-pressed', 'true');
+          showDay(user.id, d);
+        });
+        td.append(cell);
+        tr.append(td);
+      }
+      tr.append(el('td', 'total num', total ? formatDuration(total) : '—'));
+      table.append(tr);
+    }
   }
 
-  function renderClients() {
-    const query = $('client-form').client.value.trim().toLowerCase();
-    const shown = clients.filter((c) => c.name.toLowerCase().includes(query));
-    const list = $('clients');
+  async function showDay(userId, date) {
+    const data = await api('GET', `/api/reports/day?userId=${userId}&date=${date}`);
+    const detail = $('detail');
+    detail.replaceChildren();
+    const head = el('div', 'detail-head');
+    head.append(el('h3', '', `${data.user.name} · ${fmtDate(date, { weekday: 'long', day: 'numeric', month: 'long' })}`));
+    const total = data.groups.reduce((s, g) => s + g.seconds, 0);
+    head.append(el('span', 'muted num', `Total ${formatDuration(total)}`));
+    detail.append(head);
+    if (data.groups.length === 0) detail.append(el('p', 'empty', 'Día confirmado sin tiempo asignado.'));
+    for (const g of data.groups) {
+      const group = el('div', 'group');
+      const title = el('div', g.bucket === 'client' ? 'group-title' : 'group-title bucket');
+      title.append(el('span', '', groupLabel(g)), el('span', 'num', formatDuration(g.seconds)));
+      group.append(title, activityList(g.items));
+      detail.append(group);
+    }
+    detail.hidden = false;
+    detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // --- Por cliente y mes ---------------------------------------------------
+
+  async function loadMonth() {
+    $('period').textContent = monthLabel(state.month);
+    $('next').disabled = state.month >= todayISO().slice(0, 7);
+    $('now').disabled = state.month === todayISO().slice(0, 7);
+    const data = await api('GET', `/api/reports/month?month=${state.month}`);
+    const list = $('month');
     list.replaceChildren();
-    if (shown.length === 0) {
-      const li = document.createElement('li');
-      li.className = 'muted';
-      li.textContent = clients.length === 0 ? 'Todavía no hay clientes.' : 'Ningún cliente coincide. Pulsa «Nuevo» para crearlo.';
-      list.append(li);
-    }
-    for (const c of shown) {
-      const li = document.createElement('li');
-      li.textContent = c.name;
-      list.append(li);
+    $('month-empty').hidden = data.groups.length > 0;
+    const max = Math.max(1, ...data.groups.map((g) => g.seconds));
+    for (const g of data.groups) {
+      const row = el('button', g.bucket === 'client' ? 'client-row' : 'client-row bucket');
+      row.setAttribute('aria-pressed', 'false');
+      const track = el('div', 'track');
+      const bar = el('div', 'bar');
+      bar.style.width = `${(g.seconds / max) * 100}%`;
+      track.append(bar);
+      row.append(
+        el('span', 'name', groupLabel(g)),
+        track,
+        el('span', 'num', formatDuration(g.seconds)),
+        el('span', 'people', g.byUser.map((u) => `${u.name} ${formatDuration(u.seconds)}`).join(' · ')),
+      );
+      row.addEventListener('click', () => {
+        list.querySelectorAll('[aria-pressed="true"]').forEach((r) => r.setAttribute('aria-pressed', 'false'));
+        row.setAttribute('aria-pressed', 'true');
+        showClient(g);
+      });
+      list.append(row);
     }
   }
 
-  $('login-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const f = e.target;
-    try {
-      showApp(await api('POST', '/api/auth/login', { email: f.email.value, password: f.password.value }));
-      f.reset();
-      say('login-msg', '');
-    } catch (err) {
-      say('login-msg', err.message);
+  async function showClient(group) {
+    const q = group.bucket === 'client' ? `clientId=${group.clientId}` : `bucket=${group.bucket}`;
+    const data = await api('GET', `/api/reports/month/detail?month=${state.month}&${q}`);
+    const detail = $('detail');
+    detail.replaceChildren();
+    const head = el('div', 'detail-head');
+    head.append(el('h3', '', `${data.name} · ${monthLabel(state.month)}`));
+    head.append(el('span', 'muted num', `Total ${formatDuration(group.seconds)}`));
+
+    const cols = el('div', 'detail-cols');
+    const activities = el('div');
+    activities.append(el('h4', '', 'Actividades'), activityList(data.activities));
+    const people = el('div');
+    people.append(el('h4', '', 'Por persona'), simpleList(data.byUser.map((u) => [u.name, u.seconds])));
+    const days = el('div');
+    days.append(el('h4', '', 'Por día'), simpleList(data.byDay.map((d) => [capitalize(fmtDate(d.date, { weekday: 'short', day: 'numeric' })), d.seconds])));
+    cols.append(activities, people, days);
+    detail.append(head, cols);
+    detail.hidden = false;
+    detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // --- Listas ---------------------------------------------------------------
+
+  function activityList(items) {
+    const ul = el('ul', 'lines');
+    for (const a of items) {
+      const li = el('li');
+      li.append(el('span', 'kind', KIND_LABELS[a.kind] ?? a.kind), el('span', 'label', activityLabel(a)), el('span', 'value num', formatDuration(a.seconds)));
+      li.querySelector('.label').title = activityLabel(a);
+      ul.append(li);
     }
-  });
+    return ul;
+  }
 
-  $('logout').addEventListener('click', async () => {
-    await api('POST', '/api/auth/logout');
-    location.reload();
-  });
-
-  $('client-form').client.addEventListener('input', renderClients);
-  $('client-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const input = e.target.client;
-    try {
-      const created = await api('POST', '/api/clients', { name: input.value });
-      if (!clients.some((c) => c.id === created.id)) clients.push(created);
-      clients.sort((a, b) => a.name.localeCompare(b.name, 'es'));
-      input.value = '';
-      renderClients();
-      say('client-msg', `Cliente «${created.name}» listo.`, 'ok');
-    } catch (err) {
-      say('client-msg', err.message);
+  function simpleList(pairs) {
+    const ul = el('ul', 'lines');
+    for (const [label, seconds] of pairs) {
+      const li = el('li');
+      li.append(el('span', 'label', label), el('span', 'value num', formatDuration(seconds)));
+      ul.append(li);
     }
+    return ul;
+  }
+
+  $('tab-person').addEventListener('click', () => setView('person'));
+  $('tab-client').addEventListener('click', () => setView('client'));
+  $('prev').addEventListener('click', () => shift(-1));
+  $('next').addEventListener('click', () => shift(1));
+  $('now').addEventListener('click', () => {
+    state.week = mondayOf(todayISO());
+    state.month = todayISO().slice(0, 7);
+    $('detail').hidden = true;
+    load();
   });
 
-  $('agent-code-btn').addEventListener('click', async () => {
-    try {
-      const { code } = await api('POST', '/api/auth/agent-code');
-      $('agent-code').textContent = code;
-      $('agent-code-box').hidden = false;
-      say('agent-msg', 'Código nuevo generado. El anterior ya no vale.', 'ok');
-    } catch (err) {
-      say('agent-msg', err.message);
-    }
-  });
-  $('copy-code').addEventListener('click', async () => {
-    await navigator.clipboard.writeText($('agent-code').textContent);
-    say('agent-msg', 'Copiado.', 'ok');
-  });
-
-  $('password-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const f = e.target;
-    try {
-      await api('POST', '/api/auth/password', { current: f.current.value, next: f.next.value });
-      f.reset();
-      say('password-msg', 'Contraseña cambiada.', 'ok');
-    } catch (err) {
-      say('password-msg', err.message);
-    }
-  });
-
-  start();
+  await startPage('/');
+  setView(state.view);
 </script>
 </body>
 </html>
