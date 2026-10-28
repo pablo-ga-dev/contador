@@ -103,7 +103,7 @@
 <script type="module">
   import {
     KIND_LABELS, activityLabel, api, capitalize, el, fmtDate, formatDuration, hoursLabel, monthLabel, say,
-    showHoursAlerts, startPage, todayISO,
+    isAdmin, showHoursAlerts, startPage, todayISO,
   } from '/app.js';
 
   const $ = (id) => document.getElementById(id);
@@ -111,6 +111,8 @@
   let clients = [];
   let totals = new Map();
   let selected = Number(new URLSearchParams(location.search).get('id')) || null;
+  /** Solo un administrador borra clientes y gestiona sus horas; un usuario ve su propio tiempo. */
+  let admin = false;
 
   function renderList() {
     const query = form.client.value.trim().toLowerCase();
@@ -164,9 +166,12 @@
       el('h3', '', d.name),
       el('p', 'since', `Cliente desde el ${new Date(d.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`),
     );
-    const remove = el('button', 'danger', 'Borrar cliente');
-    remove.addEventListener('click', () => showDelete(d, detail));
-    head.append(titles, remove);
+    head.append(titles);
+    if (admin) {
+      const remove = el('button', 'danger', 'Borrar cliente');
+      remove.addEventListener('click', () => showDelete(d, detail));
+      head.append(remove);
+    }
     detail.append(head);
 
     const thisMonth = d.byMonth.find((m) => m.month === todayISO().slice(0, 7))?.seconds ?? 0;
@@ -321,6 +326,13 @@
     title.append(el('h4', '', 'Horas contratadas'));
     if (h?.status && h.status !== 'none') title.append(el('span', `badge ${h.status}`, hoursLabel(h)));
     box.append(title);
+
+    // Un usuario solo ve si al cliente le quedan horas: el consumo es de todo el equipo y
+    // gestionarlas es de administradores.
+    if (!admin) {
+      box.hidden = !h?.status || h.status === 'none';
+      return;
+    }
 
     const toggle = el('label', 'check');
     const box1 = el('input');
@@ -481,7 +493,7 @@
     }
   });
 
-  await startPage('/clientes');
+  admin = isAdmin(await startPage('/clientes'));
   const [list, sums] = await Promise.all([api('GET', '/api/clients'), api('GET', '/api/reports/clients')]);
   clients = list;
   totals = new Map(sums.map((t) => [t.id, t]));

@@ -5,12 +5,14 @@ import { HTTPException } from 'hono/http-exception';
 import { fileURLToPath } from 'node:url';
 import type { AppEnv } from './auth/middleware.ts';
 import { config } from './config.ts';
+import { runMigrations } from './db/migrate.ts';
 import { HttpError } from './http.ts';
 import { authRoutes } from './routes/auth.ts';
 import { clientRoutes } from './routes/clients.ts';
 import { dayRoutes } from './routes/days.ts';
 import { reportRoutes } from './routes/reports.ts';
 import { ruleRoutes } from './routes/rules.ts';
+import { userRoutes } from './routes/users.ts';
 
 const publicDir = fileURLToPath(new URL('../public', import.meta.url));
 /** Páginas de la web: ruta → archivo en public/. */
@@ -18,6 +20,8 @@ const PAGES: Record<string, string> = {
   '/': 'index.html',
   '/login': 'login.html',
   '/clientes': 'clientes.html',
+  '/estadisticas': 'estadisticas.html',
+  '/equipo': 'equipo.html',
   '/ajustes': 'ajustes.html',
 };
 
@@ -45,6 +49,7 @@ app.route('/api/clients', clientRoutes);
 app.route('/api/rules', ruleRoutes);
 app.route('/api/days', dayRoutes);
 app.route('/api/reports', reportRoutes);
+app.route('/api/users', userRoutes);
 app.all('/api/*', (c) => c.json({ error: 'No existe.' }, 404));
 for (const [route, file] of Object.entries(PAGES)) {
   app.get(route, serveStatic({ root: publicDir, path: file }));
@@ -57,6 +62,9 @@ app.onError((err, c) => {
   console.error(err);
   return c.json({ error: 'Error interno.' }, 500);
 });
+
+// Crea o actualiza las tablas antes de empezar a atender.
+for (const file of await runMigrations()) console.log(`Base de datos: aplicada ${file}`);
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`DIALOGUE web en http://localhost:${info.port}`);

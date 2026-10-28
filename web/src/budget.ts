@@ -1,4 +1,5 @@
-import { sql } from './db/index.ts';
+import { today } from './config.ts';
+import { db, sql } from './db/index.ts';
 
 /**
  * Horas contratadas de un cliente.
@@ -32,7 +33,8 @@ export interface Budget {
 
 interface ClientHours {
   id: number;
-  track_hours: boolean;
+  /** MySQL devuelve los BOOLEAN como 0/1. */
+  track_hours: number | boolean;
   monthly_seconds: number | null;
   tracking_since: string | null;
 }
@@ -94,36 +96,37 @@ export function computeBudget(
 
 /** Horas de los clientes con seguimiento activado (o de los indicados). */
 export async function loadBudgets(ids?: number[]): Promise<Map<number, Budget>> {
-  const [{ month }] = await sql<{ month: string }[]>`SELECT to_char(current_date, 'YYYY-MM') AS month`;
-  const clients = await sql<ClientHours[]>`
-    SELECT id, track_hours, monthly_seconds, tracking_since::text AS tracking_since
+  if (ids && ids.length === 0) return new Map();
+  const month = today().slice(0, 7);
+  const clients = await db.query<ClientHours>(sql`
+    SELECT id, track_hours, monthly_seconds, tracking_since
       FROM clients
-     WHERE ${ids ? sql`id IN ${sql(ids)}` : sql`track_hours`}`;
+     WHERE ${ids ? sql`id IN ${ids}` : sql`track_hours`}`);
   if (clients.length === 0) return new Map();
   const clientIds = clients.map((c) => c.id);
 
   const [usage, packs] = await Promise.all([
-    sql<{ client_id: number; month: string; seconds: number }[]>`
-      SELECT i.client_id, to_char(i.date, 'YYYY-MM') AS month, SUM(i.seconds)::int AS seconds
+    db.query<{ client_id: number; month: string; seconds: number }>(sql`
+      SELECT i.client_id, DATE_FORMAT(i.date, '%Y-%m') AS month, SUM(i.seconds) AS seconds
         FROM day_items i JOIN clients c ON c.id = i.client_id
-       WHERE i.client_id IN ${sql(clientIds)}
-         AND i.date >= COALESCE(c.tracking_since, date_trunc('month', current_date)::date)
-       GROUP BY 1, 2`,
-    sql<Pack[]>`
-      SELECT id, client_id, seconds, purchased_on::text AS purchased_on, note
-        FROM client_packs WHERE client_id IN ${sql(clientIds)}`,
+       WHERE i.client_id IN ${clientIds}
+         AND i.date >= COALESCE(c.tracking_since, ${`${month}-01`})
+       GROUP BY i.client_id, month`),
+    db.query<Pack>(sql`
+      SELECT id, client_id, seconds, purchased_on, note
+        FROM client_packs WHERE client_id IN ${clientIds}`),
   ]);
 
   const result = new Map<number, Budget>();
   for (const c of clients) {
-    const byMonth = new Map(usage.filter((u) => u.client_id === c.id).map((u) => [u.month, u.seconds]));
+    const byMonth = new Map(usage.filter((u) => u.client_id === c.id).map((u) => [u.month, Number(u.seconds)]));
     const own = packs
       .filter((p) => p.client_id === c.id)
       .map((p) => ({ id: p.id, seconds: p.seconds, purchasedOn: p.purchased_on, note: p.note }));
     result.set(
       c.id,
       computeBudget(
-        { tracking: c.track_hours, trackingSince: c.tracking_since, monthlySeconds: c.monthly_seconds },
+        { tracking: Boolean(c.track_hours), trackingSince: c.tracking_since, monthlySeconds: c.monthly_seconds },
         byMonth,
         own,
         month,

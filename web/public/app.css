@@ -152,3 +152,6 @@ button.danger { color: var(--danger); }
 }
 .badge.ok { color: var(--ok); }
 .badge.exhausted, .badge.over { color: var(--danger); }
+
+button.link { border: 0; padding: 2px 4px; color: var(--accent); }
+button.link:hover:not(:disabled) { background: transparent; text-decoration: underline; }

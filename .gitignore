@@ -7,3 +7,7 @@ web/public/fonts/
 *.db-shm
 *.db-wal
 .claude/settings.local.json
+
+# Configuraciones locales de prueba (.env.mariadb, .env.mysql...)
+.env.*
+!.env.example

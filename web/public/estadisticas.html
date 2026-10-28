@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estadísticas · DIALOGUE</title>
+<link rel="stylesheet" href="/app.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  .toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin-bottom: 16px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 4px; }
+  .presets button[aria-pressed="true"] { background: var(--hover); border-color: var(--pulse); }
+  .range { display: flex; align-items: flex-end; gap: 8px; }
+  .range label { margin: 0; }
+  .range input { width: 160px; }
+  .toolbar .tabs { margin-left: auto; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .kpi { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .kpi .label { color: var(--text-secondary); font-size: 12px; }
+  .kpi .value { font: 600 24px/1.2 var(--font-title); }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-align: left; padding: 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th.n, td.n { text-align: right; }
+  td { padding: 0; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: 0; }
+  tr.stat { cursor: pointer; }
+  tr.stat td { padding: 9px 8px; }
+  tr.stat:hover td, tr.stat[aria-selected="true"] td { background: var(--hover); }
+  tr.stat[aria-selected="true"] td:first-child { box-shadow: inset 3px 0 0 var(--pulse); }
+  td .track { height: 6px; margin-top: 6px; background: var(--track); border-radius: 3px; overflow: hidden; }
+  td .bar { height: 100%; background: var(--bar); border-radius: 0 3px 3px 0; min-width: 2px; }
+  td.muted-bucket { color: var(--text-secondary); }
+
+  .detail-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .detail-head h3 { margin: 0; font-size: 18px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 28px; }
+  .cols h4 { margin: 0 0 8px; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .08em; }
+  .lines { list-style: none; margin: 0; padding: 0; }
+  .lines li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 5px 0; }
+  .lines .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lines .value { color: var(--text-secondary); }
+  .lines .track { grid-column: 1 / -1; height: 6px; background: var(--track); border-radius: 3px; overflow: hidden; }
+  .lines .bar { height: 100%; background: var(--bar); border-radius: 0 3px 3px 0; min-width: 2px; }
+  .lines .bucket .bar { opacity: .5; }
+
+  /* Gráfico de columnas: tiempo por día (o por mes en rangos largos). */
+  .chart { grid-column: 1 / -1; }
+  .columns { display: flex; align-items: flex-end; gap: 2px; height: 140px; padding-bottom: 1px; border-bottom: 1px solid var(--border); }
+  .columns .col { flex: 1; min-width: 2px; background: var(--bar); border-radius: 3px 3px 0 0; }
+  .columns .col:hover { filter: brightness(1.2); }
+  .columns .col.zero { background: transparent; }
+  .axis { display: flex; justify-content: space-between; color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+  .notes li { display: block; border-top: 1px solid var(--border); }
+  .notes .meta { color: var(--text-muted); font-size: 12px; }
+  .notes .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+  @media (max-width: 820px) {
+    .kpis { grid-template-columns: 1fr 1fr; }
+    .cols { grid-template-columns: 1fr; }
+    .toolbar .tabs { margin-left: 0; }
+    .table-scroll { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="toolbar">
+    <div>
+      <div class="presets" role="group" aria-label="Periodo" id="presets"></div>
+    </div>
+    <form class="range" id="range">
+      <label>Desde <input type="date" name="from" required></label>
+      <label>Hasta <input type="date" name="to" required></label>
+      <button type="submit">Ver</button>
+    </form>
+    <div class="tabs" role="group" aria-label="Vista">
+      <button id="tab-people" aria-pressed="true">Personas</button>
+      <button id="tab-clients" aria-pressed="false">Clientes</button>
+    </div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+  <section class="card"><div class="table-scroll"><table id="table"></table></div><p class="empty" id="empty" hidden></p></section>
+  <section class="card" id="detail" hidden></section>
+  <div class="msg error" id="msg"></div>
+</main>
+<script type="module">
+  import {
+    KIND_LABELS, activityLabel, addDays, api, capitalize, el, fmtDate, formatDuration, groupLabel, isAdmin, startPage, todayISO,
+  } from '/app.js';
+
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const today = todayISO();
+  const monthStart = (iso) => `${iso.slice(0, 7)}-01`;
+  const monthEnd = (iso) => addDays(`${addMonth(iso.slice(0, 7))}-01`, -1);
+  function addMonth(month, n = 1) {
+    const [y, m] = month.split('-').map(Number);
+    const d = new Date(y, m - 1 + n, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+  const PRESETS = [
+    ['Este mes', () => [monthStart(today), today]],
+    ['Mes pasado', () => { const m = addMonth(today.slice(0, 7), -1); return [`${m}-01`, monthEnd(`${m}-01`)]; }],
+    ['Últimos 30 días', () => [addDays(today, -29), today]],
+    ['Este año', () => [`${today.slice(0, 4)}-01-01`, today]],
+  ];
+
+  const state = {
+    view: params.get('vista') === 'clientes' ? 'clients' : 'people',
+    from: params.get('desde') ?? monthStart(today),
+    to: params.get('hasta') ?? today,
+    selected: null,
+  };
+  let me;
+
+  const short = (iso) => fmtDate(iso, { day: 'numeric', month: 'short' });
+  const dayCount = () => Math.round((Date.parse(state.to) - Date.parse(state.from)) / 86_400_000) + 1;
+
+  function renderPresets() {
+    const box = $('presets');
+    box.replaceChildren();
+    for (const [label, range] of PRESETS) {
+      const [from, to] = range();
+      const b = el('button', '', label);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(from === state.from && to === state.to));
+      b.addEventListener('click', () => setRange(from, to));
+      box.append(b);
+    }
+    $('range').from.value = state.from;
+    $('range').to.value = state.to;
+  }
+
+  function setRange(from, to) {
+    state.from = from;
+    state.to = to;
+    state.selected = null;
+    load();
+  }
+
+  function setView(view) {
+    state.view = view;
+    state.selected = null;
+    $('tab-people').setAttribute('aria-pressed', String(view === 'people'));
+    $('tab-clients').setAttribute('aria-pressed', String(view === 'clients'));
+    load();
+  }
+
+  async function load() {
+    history.replaceState(null, '', `/estadisticas?vista=${state.view === 'clients' ? 'clientes' : 'personas'}&desde=${state.from}&hasta=${state.to}`);
+    renderPresets();
+    $('msg').textContent = '';
+    $('detail').hidden = true;
+    try {
+      if (state.view === 'people') await loadPeople();
+      else await loadClients();
+    } catch (err) {
+      $('msg').textContent = err.message;
+    }
+  }
+
+  function kpis(items) {
+    $('kpis').replaceChildren(...items.map(([label, value]) => {
+      const k = el('div', 'kpi');
+      k.append(el('div', 'label', label), el('div', 'value num', value));
+      return k;
+    }));
+  }
+
+  function bar(fraction, extra = '') {
+    const track = el('div', `track ${extra}`);
+    const b = el('div', 'bar');
+    b.style.width = `${Math.max(0, Math.min(1, fraction)) * 100}%`;
+    track.append(b);
+    return track;
+  }
+
+  // --- Personas ----------------------------------------------------------------
+
+  async function loadPeople() {
+    const { users } = await api('GET', `/api/reports/range/users?from=${state.from}&to=${state.to}`);
+    const total = users.reduce((s, u) => s + u.total, 0);
+    const clients = users.reduce((s, u) => s + u.client, 0);
+    const days = users.reduce((s, u) => s + u.days, 0);
+    kpis([
+      ['Total', formatDuration(total)],
+      ['En clientes', total ? `${Math.round((clients / total) * 100)} %` : '—'],
+      [isAdmin(me) ? 'Personas con tiempo' : 'Días con tiempo', isAdmin(me) ? String(users.filter((u) => u.total).length) : String(days)],
+      ['Media por día con tiempo', days ? formatDuration(total / days) : '—'],
+    ]);
+
+    const table = $('table');
+    table.replaceChildren();
+    const head = el('tr');
+    for (const [h, n] of [['Persona', false], ['Total', true], ['Clientes', true], ['Interno', true], ['Sin cliente', true], ['Días', true], ['Media/día', true]]) head.append(el('th', n ? 'n' : '', h));
+    table.append(head);
+    const max = Math.max(1, ...users.map((u) => u.total));
+    for (const u of users) {
+      const tr = el('tr', 'stat');
+      tr.tabIndex = 0;
+      tr.setAttribute('aria-selected', String(state.selected === u.id));
+      const name = el('td');
+      name.append(el('div', '', u.name), bar(u.total / max));
+      tr.append(
+        name,
+        el('td', 'n num', formatDuration(u.total)),
+        el('td', 'n num', formatDuration(u.client)),
+        el('td', 'n num', formatDuration(u.internal)),
+        el('td', 'n num', formatDuration(u.unassigned)),
+        el('td', 'n num', String(u.days)),
+        el('td', 'n num', u.days ? formatDuration(u.total / u.days) : '—'),
+      );
+      const open = () => { state.selected = u.id; table.querySelectorAll('tr.stat').forEach((r) => r.setAttribute('aria-selected', String(r === tr))); showPerson(u.id); };
+      tr.addEventListener('click', open);
+      tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
+      table.append(tr);
+    }
+    $('empty').hidden = users.length > 0;
+    $('empty').textContent = 'No hay personas.';
+    // Un usuario solo se ve a sí mismo: abrimos su detalle directamente.
+    if (!isAdmin(me) && users[0]) { state.selected = users[0].id; table.querySelector('tr.stat')?.setAttribute('aria-selected', 'true'); showPerson(users[0].id); }
+  }
+
+  async function showPerson(id) {
+    const d = await api('GET', `/api/reports/range/users/${id}?from=${state.from}&to=${state.to}`);
+    const detail = $('detail');
+    detail.replaceChildren();
+    const head = el('div', 'detail-head');
+    const total = d.byClient.reduce((s, g) => s + g.seconds, 0);
+    head.append(el('h3', '', `${d.user.name} · del ${short(d.from)} al ${short(d.to)}`), el('span', 'muted num', `Total ${formatDuration(total)}`));
+    const cols = el('div', 'cols');
+    cols.append(
+      section('Por cliente', lines(d.byClient.map((g) => [groupLabel(g), g.seconds, g.bucket !== 'client']), total)),
+      section('Webs, chats y apps', activityLines(d.activities)),
+      chart(d.byDay),
+    );
+    detail.append(head, total ? cols : el('p', 'empty', 'Sin tiempo confirmado en estas fechas.'));
+    detail.hidden = false;
+  }
+
+  // --- Clientes ----------------------------------------------------------------
+
+  async function loadClients() {
+    const { groups } = await api('GET', `/api/reports/range/clients?from=${state.from}&to=${state.to}`);
+    const total = groups.reduce((s, g) => s + g.seconds, 0);
+    const clientGroups = groups.filter((g) => g.bucket === 'client');
+    const clients = clientGroups.reduce((s, g) => s + g.seconds, 0);
+    kpis([
+      ['Total', formatDuration(total)],
+      ['En clientes', formatDuration(clients)],
+      ['Clientes con tiempo', String(clientGroups.length)],
+      ['Cliente principal', clientGroups[0]?.name ?? '—'],
+    ]);
+
+    const table = $('table');
+    table.replaceChildren();
+    const head = el('tr');
+    for (const [h, n] of [['Cliente', false], ['Total', true], ['% del total', true], [isAdmin(me) ? 'Personas' : '', false]]) head.append(el('th', n ? 'n' : '', h));
+    table.append(head);
+    const max = Math.max(1, ...groups.map((g) => g.seconds));
+    for (const g of groups) {
+      const tr = el('tr', 'stat');
+      tr.tabIndex = 0;
+      const key = g.bucket === 'client' ? `c${g.clientId}` : g.bucket;
+      tr.setAttribute('aria-selected', String(state.selected === key));
+      const name = el('td', g.bucket === 'client' ? '' : 'muted-bucket');
+      name.append(el('div', '', groupLabel(g)), bar(g.seconds / max));
+      tr.append(
+        name,
+        el('td', 'n num', formatDuration(g.seconds)),
+        el('td', 'n num', total ? `${Math.round((g.seconds / total) * 100)} %` : '—'),
+        el('td', 'muted', isAdmin(me) ? g.byUser.map((u) => `${u.name} ${formatDuration(u.seconds)}`).join(' · ') : ''),
+      );
+      const open = () => { state.selected = key; table.querySelectorAll('tr.stat').forEach((r) => r.setAttribute('aria-selected', String(r === tr))); showClient(g); };
+      tr.addEventListener('click', open);
+      tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
+      table.append(tr);
+    }
+    $('empty').hidden = groups.length > 0;
+    $('empty').textContent = 'Sin tiempo confirmado en estas fechas.';
+  }
+
+  async function showClient(g) {
+    const q = g.bucket === 'client' ? `clientId=${g.clientId}` : `bucket=${g.bucket}`;
+    const d = await api('GET', `/api/reports/range/clients/detail?from=${state.from}&to=${state.to}&${q}`);
+    const detail = $('detail');
+    detail.replaceChildren();
+    const head = el('div', 'detail-head');
+    head.append(el('h3', '', `${d.name} · del ${short(d.from)} al ${short(d.to)}`), el('span', 'muted num', `Total ${formatDuration(g.seconds)}`));
+    const cols = el('div', 'cols');
+    cols.append(section('Webs, chats y apps', activityLines(d.activities)));
+    if (isAdmin(me)) cols.append(section('Por persona', lines(d.byUser.map((u) => [u.name, u.seconds]), g.seconds)));
+    cols.append(chart(d.byDay));
+    if (d.notes.length) {
+      const ul = el('ul', 'lines notes');
+      for (const n of d.notes) {
+        const li = el('li');
+        li.append(el('div', 'meta', `${capitalize(fmtDate(n.date, { weekday: 'short', day: 'numeric', month: 'short' }))} · ${n.userName}`), el('div', 'text', n.note));
+        ul.append(li);
+      }
+      const notes = section('Comentarios', ul);
+      notes.classList.add('chart');
+      cols.append(notes);
+    }
+    detail.append(head, cols);
+    detail.hidden = false;
+  }
+
+  // --- Piezas ------------------------------------------------------------------
+
+  function section(title, content) {
+    const div = el('div');
+    div.append(el('h4', '', title), content);
+    return div;
+  }
+
+  function lines(rows, total) {
+    const ul = el('ul', 'lines');
+    const max = Math.max(1, ...rows.map((r) => r[1]));
+    for (const [label, seconds, isBucket] of rows) {
+      const li = el('li', isBucket ? 'bucket' : '');
+      const pct = total ? ` · ${Math.round((seconds / total) * 100)} %` : '';
+      li.append(el('span', 'label', label), el('span', 'value num', `${formatDuration(seconds)}${pct}`), bar(seconds / max));
+      ul.append(li);
+    }
+    if (!rows.length) ul.append(el('li', 'muted', 'Sin datos'));
+    return ul;
+  }
+
+  function activityLines(activities) {
+    const ul = el('ul', 'lines');
+    const max = Math.max(1, ...activities.map((a) => a.seconds));
+    for (const a of activities) {
+      const li = el('li');
+      const label = el('span', 'label');
+      label.append(el('span', 'kind', KIND_LABELS[a.kind] ?? a.kind), ' ', activityLabel(a));
+      label.title = activityLabel(a);
+      li.append(label, el('span', 'value num', formatDuration(a.seconds)), bar(a.seconds / max));
+      ul.append(li);
+    }
+    if (!activities.length) ul.append(el('li', 'muted', 'Sin datos'));
+    return ul;
+  }
+
+  /** Columnas por día; si el rango pasa de ~3 meses, por mes. */
+  function chart(byDay) {
+    const perDay = new Map(byDay.map((d) => [d.date, Number(d.seconds)]));
+    const monthly = dayCount() > 92;
+    const buckets = [];
+    if (monthly) {
+      for (let m = state.from.slice(0, 7); m <= state.to.slice(0, 7); m = addMonth(m)) {
+        const seconds = [...perDay].filter(([d]) => d.startsWith(m)).reduce((s, [, v]) => s + v, 0);
+        buckets.push({ label: capitalize(new Date(`${m}-01T00:00:00`).toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })), seconds });
+      }
+    } else {
+      for (let d = state.from; d <= state.to; d = addDays(d, 1)) {
+        buckets.push({ label: capitalize(fmtDate(d, { weekday: 'short', day: 'numeric', month: 'short' })), seconds: perDay.get(d) ?? 0 });
+      }
+    }
+    const max = Math.max(1, ...buckets.map((b) => b.seconds));
+    const cols = el('div', 'columns');
+    cols.setAttribute('role', 'img');
+    cols.setAttribute('aria-label', `Tiempo ${monthly ? 'por mes' : 'por día'}: ${buckets.filter((b) => b.seconds).map((b) => `${b.label} ${formatDuration(b.seconds)}`).join(', ') || 'sin datos'}`);
+    for (const b of buckets) {
+      const col = el('div', b.seconds ? 'col' : 'col zero');
+      col.style.height = `${(b.seconds / max) * 100}%`;
+      col.title = `${b.label}: ${formatDuration(b.seconds)}`;
+      cols.append(col);
+    }
+    const axis = el('div', 'axis');
+    axis.append(el('span', '', buckets[0]?.label ?? ''), el('span', '', buckets.at(-1)?.label ?? ''));
+    const box = section(monthly ? 'Por mes' : 'Por día', cols);
+    box.classList.add('chart');
+    box.append(axis);
+    return box;
+  }
+
+  $('range').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = e.target;
+    if (f.to.value < f.from.value) {
+      $('msg').textContent = 'La fecha de fin es anterior a la de inicio.';
+      return;
+    }
+    setRange(f.from.value, f.to.value);
+  });
+  $('tab-people').addEventListener('click', () => setView('people'));
+  $('tab-clients').addEventListener('click', () => setView('clients'));
+
+  me = await startPage('/estadisticas');
+  $('tab-people').textContent = isAdmin(me) ? 'Personas' : 'Mis horas';
+  setView(state.view);
+</script>
+</body>
+</html>
