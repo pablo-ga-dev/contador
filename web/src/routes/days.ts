@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { requireUser, type AppEnv } from '../auth/middleware.ts';
-import { sql } from '../db/index.ts';
-import { HttpError, jsonBody, text } from '../http.ts';
+import { MISSING_REFERENCE, db, errorCode, rows, sql } from '../db/index.ts';
+import { HttpError, jsonBody, parseDate, text } from '../http.ts';
 
 const KINDS = ['domain', 'chat', 'app'] as const;
 const BUCKETS = ['client', 'internal', 'unassigned'] as const;
 const MAX_ITEMS = 2000;
+const MAX_KEY_LENGTH = 255;
 const MAX_NOTES = 100;
 const MAX_NOTE_LENGTH = 2000;
 const DAY_SECONDS = 24 * 3600;
@@ -37,10 +38,7 @@ dayRoutes.use(requireUser);
  * se puede corregir un día volviéndolo a confirmar.
  */
 dayRoutes.put('/:date', async (c) => {
-  const date = c.req.param('date');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) {
-    throw new HttpError(400, 'Fecha no válida (formato AAAA-MM-DD).');
-  }
+  const date = parseDate(c.req.param('date'));
   const body = await jsonBody(c);
   if (!Array.isArray(body.items) || body.items.length > MAX_ITEMS) {
     throw new HttpError(400, `items debe ser una lista de como mucho ${MAX_ITEMS} actividades.`);
@@ -50,39 +48,33 @@ dayRoutes.put('/:date', async (c) => {
   const user = c.get('user');
 
   try {
-    await sql.begin(async (tx) => {
-      await tx`
+    await db.transaction(async (tx) => {
+      await tx.exec(sql`
         INSERT INTO days (user_id, date) VALUES (${user.id}, ${date})
-        ON CONFLICT (user_id, date) DO UPDATE SET confirmed_at = now()`;
-      await tx`DELETE FROM day_items WHERE user_id = ${user.id} AND date = ${date}`;
+        ON DUPLICATE KEY UPDATE confirmed_at = UTC_TIMESTAMP()`);
+      await tx.exec(sql`DELETE FROM day_items WHERE user_id = ${user.id} AND date = ${date}`);
       if (items.length > 0) {
-        const rows = items.map((i) => ({
-          user_id: user.id,
-          date,
-          kind: i.kind,
-          key: i.key,
-          seconds: i.seconds,
-          bucket: i.bucket,
-          client_id: i.clientId,
-        }));
-        await tx`INSERT INTO day_items ${tx(rows)}`;
+        await tx.exec(sql`
+          INSERT INTO day_items (user_id, date, kind, activity_key, seconds, bucket, client_id)
+          VALUES ${rows(items.map((i) => [user.id, date, i.kind, i.key, i.seconds, i.bucket, i.clientId]))}`);
       }
       for (const i of items) {
         if (!i.remember || i.clientId === null) continue;
-        await tx`
-          INSERT INTO rules (kind, key, client_id, updated_by)
+        await tx.exec(sql`
+          INSERT INTO rules (kind, activity_key, client_id, updated_by)
           VALUES (${i.kind}, ${i.key}, ${i.clientId}, ${user.id})
-          ON CONFLICT (kind, key) DO UPDATE
-            SET client_id = EXCLUDED.client_id, updated_by = EXCLUDED.updated_by, updated_at = now()`;
+          ON DUPLICATE KEY UPDATE
+            client_id = VALUES(client_id), updated_by = VALUES(updated_by), updated_at = UTC_TIMESTAMP()`);
       }
-      await tx`DELETE FROM day_notes WHERE user_id = ${user.id} AND date = ${date}`;
+      await tx.exec(sql`DELETE FROM day_notes WHERE user_id = ${user.id} AND date = ${date}`);
       if (notes.length > 0) {
-        const rows = notes.map((n) => ({ user_id: user.id, date, client_id: n.clientId, note: n.text }));
-        await tx`INSERT INTO day_notes ${tx(rows)}`;
+        await tx.exec(sql`
+          INSERT INTO day_notes (user_id, date, client_id, note)
+          VALUES ${rows(notes.map((n) => [user.id, date, n.clientId, n.text]))}`);
       }
     });
   } catch (err) {
-    if ((err as { code?: string }).code === '23503') throw new HttpError(400, 'Algún cliente no existe.');
+    if (errorCode(err) === MISSING_REFERENCE) throw new HttpError(400, 'Algún cliente no existe.');
     throw err;
   }
   return c.json({ date, items: items.length, notes: notes.length });
@@ -127,7 +119,7 @@ function parseItem(raw: unknown, index: number): DayItem {
   }
   return {
     kind: r.kind as Kind,
-    key: text(r.key, `la clave de ${where}`, 500),
+    key: text(r.key, `la clave de ${where}`, MAX_KEY_LENGTH),
     seconds,
     bucket: r.bucket as Bucket,
     clientId: clientId as number | null,

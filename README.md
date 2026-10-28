@@ -168,26 +168,44 @@ Sin la extensión el agente funciona igual, pero no sabrá en qué dominio está
 
 La carpeta `web/` es la web del equipo: usuarios, clientes y los tiempos que
 cada uno confirma al final del día. Es un servidor Node/TypeScript
-([Hono](https://hono.dev)) con Postgres.
+([Hono](https://hono.dev)) con **MySQL 8 o MariaDB 10.6+**.
 
-### Ponerla en marcha (desarrollo)
+### Ponerla en marcha
 
-Necesitas [Docker](https://www.docker.com) para la base de datos.
+1. En **phpMyAdmin**, crea una base de datos vacía (cotejamiento
+   `utf8mb4_unicode_ci`) y un usuario con todos los permisos sobre ella.
+2. Configura la conexión:
 
-```bash
-cd web
-npm install
-cp .env.example .env
-npm run db:up        # Postgres en Docker (puerto 5433)
-npm run migrate      # crea las tablas
-npm run create-user -- tu@email.com "Tu Nombre"
-npm run dev          # http://localhost:3030
-```
+   ```bash
+   cd web
+   npm install
+   cp .env.example .env
+   ```
+
+   y en `.env` pon `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD`
+   (o una `DATABASE_URL=mysql://…`).
+3. Crea el primer **administrador** (también crea las tablas):
+
+   ```bash
+   npm run create-user -- tu@email.com "Tu Nombre" --admin
+   ```
+
+4. Arranca la web: `npm run dev` (o `npm start`) → http://localhost:3030.
+   Al arrancar crea o actualiza las tablas sola (`npm run migrate` lo hace a mano).
 
 `create-user` muestra una contraseña temporal una sola vez; cámbiala al entrar.
-Si alguien la olvida, `npm run reset-password -- su@email.com` le genera otra
-temporal y cierra sus sesiones abiertas.
-Para parar la base de datos: `npm run db:down` (los datos se conservan).
+El resto del equipo se da de alta desde la página **Equipo**. Por si hiciera
+falta desde la consola: `npm run reset-password -- su@email.com` (contraseña
+temporal nueva y cierra sus sesiones) y `npm run set-role -- su@email.com admin`.
+
+### Roles
+
+- **Usuario**: solo ve **sus propias horas** (Tiempos, Estadísticas y su tiempo
+  en la ficha de cada cliente). Puede crear clientes (hace falta al revisar el
+  día) y ve si a un cliente le quedan horas contratadas, pero no las gestiona.
+- **Administrador**: ve las horas de todo el equipo, borra clientes, gestiona
+  sus horas contratadas y el **Equipo** (altas, roles y contraseñas). Siempre
+  queda al menos un administrador.
 
 ### Qué hace ya
 
@@ -196,7 +214,15 @@ Para parar la base de datos: `npm run db:down` (los datos se conservan).
     cada día; al pulsar un día se ve por cliente, con sus webs, chats y apps.
   - *Por cliente y mes*: el total de cada cliente (y de Interno y Sin cliente)
     con el reparto por persona; al pulsar uno se ven sus actividades, personas y días.
-  De momento todo el equipo ve los tiempos de todos.
+  Un usuario solo ve los suyos (ver Roles).
+- **Estadísticas**: entre las fechas que se elijan (con atajos: este mes, mes
+  pasado, últimos 30 días, este año), por **personas** (total, clientes,
+  interno, sin cliente, días y media por día) y por **clientes** (total, % y
+  reparto por persona). Al pulsar una fila, su detalle: por cliente o por
+  persona, webs, chats y apps, gráfico por día (por mes en rangos largos) y
+  comentarios.
+- **Equipo** (solo administradores): altas con contraseña temporal, cambio de
+  rol y nueva contraseña.
 - **Clientes**: lista con buscador, alta (sin duplicados, aunque cambien
   mayúsculas) y el tiempo total de cada uno. Al pulsar un cliente, su ficha:
   total, este mes y personas; tiempo por mes (cada mes enlaza a su detalle en
@@ -279,13 +305,14 @@ agent/src/
 extension/             extensión Manifest V3 para navegadores Chromium
 web/
   src/
-    server.ts          servidor web y protección CSRF
-    auth/              contraseñas, sesiones y código del agente
-    routes/            API: auth, clientes, reglas y días
-    db/                conexión, migraciones SQL y su aplicador
-    scripts/           alta de usuarios
-  public/index.html    la web (HTML, CSS y JS sin dependencias)
-  docker-compose.yml   Postgres de desarrollo
+    server.ts          servidor web, protección CSRF y migraciones al arrancar
+    auth/              contraseñas, sesiones, código del agente y roles
+    routes/            API: auth, clientes, reglas, días, informes y equipo
+    db/                conexión MySQL/MariaDB, migraciones SQL y su aplicador
+    budget.ts          cálculo de horas contratadas
+    users.ts           altas, roles y contraseñas temporales
+    scripts/           migrate, create-user, reset-password y set-role
+  public/              páginas (HTML, CSS y JS sin dependencias)
 ```
 
 **Preparado para migrar**: la única pieza que depende del sistema operativo es

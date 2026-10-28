@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Equipo · DIALOGUE</title>
+<link rel="stylesheet" href="/app.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  main { max-width: 900px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  td .email { color: var(--text-secondary); font-size: 13px; }
+  td select {
+    padding: 5px 8px; font: inherit; color: var(--text-primary);
+    background: var(--surface-0); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .new { display: grid; grid-template-columns: 1fr 1fr 140px auto; gap: 10px; align-items: end; }
+  .new label { margin: 0; }
+  .new select { display: block; width: 100%; margin-top: 4px; padding: 7px 10px; font: inherit; color: var(--text-primary); background: var(--surface-0); border: 1px solid var(--border); border-radius: 6px; }
+  .secret {
+    margin-top: 12px; padding: 12px; border-radius: 8px; border: 1px dashed var(--pulse); background: var(--surface-0);
+  }
+  .secret code { font: 600 15px/1.4 Consolas, "Cascadia Mono", monospace; user-select: all; }
+  .help { color: var(--text-secondary); font-size: 13px; }
+  @media (max-width: 760px) {
+    .new { grid-template-columns: 1fr; }
+    .table-scroll { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <h2>Dar de alta</h2>
+    <form class="new" id="new">
+      <label>Nombre <input name="name" maxlength="80" required autocomplete="off"></label>
+      <label>Email <input name="email" type="email" maxlength="255" required autocomplete="off"></label>
+      <label>Rol
+        <select name="role">
+          <option value="user">Usuario</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </label>
+      <button class="primary" type="submit">Dar de alta</button>
+    </form>
+    <div class="msg" id="msg"></div>
+    <div class="secret" id="secret" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2>Equipo</h2>
+    <p class="help">Un <strong>usuario</strong> solo ve sus propias horas. Un <strong>administrador</strong> ve las de todos y gestiona el equipo, el borrado de clientes y sus horas contratadas.</p>
+    <div class="table-scroll"><table id="users"></table></div>
+  </section>
+</main>
+<script type="module">
+  import { api, el, say, startPage } from '/app.js';
+
+  const $ = (id) => document.getElementById(id);
+  const when = (iso) => (iso ? new Date(iso).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
+  let me;
+
+  /** Muestra una contraseña temporal una sola vez, con botón para copiarla. */
+  function showSecret(name, password) {
+    const box = $('secret');
+    box.replaceChildren();
+    const code = el('code', '', password);
+    const copy = el('button', '', 'Copiar');
+    copy.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(password);
+      copy.textContent = 'Copiada';
+    });
+    box.append(
+      el('div', '', `Contraseña temporal de ${name} (solo se muestra ahora; pásasela por un canal privado):`),
+      code, ' ', copy,
+    );
+    box.hidden = false;
+  }
+
+  async function load() {
+    const users = await api('GET', '/api/users');
+    const table = $('users');
+    table.replaceChildren();
+    const head = el('tr');
+    for (const h of ['Persona', 'Rol', 'Agente (último contacto)', 'Alta', '']) head.append(el('th', '', h));
+    table.append(head);
+    for (const u of users) {
+      const tr = el('tr');
+      const who = el('td');
+      who.append(el('div', '', u.name + (u.id === me.id ? ' (tú)' : '')), el('div', 'email', u.email));
+      const roleTd = el('td');
+      const role = el('select');
+      role.setAttribute('aria-label', `Rol de ${u.name}`);
+      role.append(new Option('Usuario', 'user'), new Option('Administrador', 'admin'));
+      role.value = u.role;
+      role.addEventListener('change', async () => {
+        try {
+          await api('PATCH', `/api/users/${u.id}`, { role: role.value });
+          say('msg', `${u.name} ahora es ${role.value === 'admin' ? 'administrador' : 'usuario'}.`, 'ok');
+          if (u.id === me.id && role.value !== 'admin') location.href = '/';
+        } catch (err) {
+          role.value = u.role;
+          say('msg', err.message);
+        }
+      });
+      roleTd.append(role);
+      const reset = el('button', 'link', 'Nueva contraseña');
+      reset.addEventListener('click', async () => {
+        if (!confirm(`Se generará una contraseña temporal para ${u.name} y se cerrarán sus sesiones. ¿Seguir?`)) return;
+        try {
+          const { password } = await api('POST', `/api/users/${u.id}/reset-password`);
+          showSecret(u.name, password);
+          say('msg', '');
+        } catch (err) {
+          say('msg', err.message);
+        }
+      });
+      const resetTd = el('td');
+      resetTd.append(reset);
+      tr.append(who, roleTd, el('td', 'num', when(u.agentLastUsedAt)), el('td', 'num', when(u.createdAt)), resetTd);
+      table.append(tr);
+    }
+  }
+
+  $('new').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    // form.name y form.role son propiedades del propio formulario: los campos, por su nombre.
+    const field = (n) => f.elements.namedItem(n).value;
+    try {
+      const created = await api('POST', '/api/users', { name: field('name'), email: field('email'), role: field('role') });
+      showSecret(created.name, created.password);
+      say('msg', `${created.name} dado de alta.`, 'ok');
+      f.reset();
+      load();
+    } catch (err) {
+      say('msg', err.message);
+    }
+  });
+
+  me = await startPage('/equipo', { adminOnly: true });
+  load();
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 
 /** Error con un mensaje apto para mostrar al usuario y su código HTTP. */
 export class HttpError extends Error {
-  status: 400 | 401 | 404 | 409 | 429;
+  status: 400 | 401 | 403 | 404 | 409 | 429;
 
   constructor(status: HttpError['status'], message: string) {
     super(message);
@@ -25,4 +25,17 @@ export function text(value: unknown, field: string, maxLength = 200): string {
   if (typeof value !== 'string' || !value.trim()) throw new HttpError(400, `Falta ${field}.`);
   if (value.length > maxLength) throw new HttpError(400, `${field} es demasiado largo.`);
   return value.trim();
+}
+
+export function parseDate(value: unknown, what = 'La fecha'): string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) {
+    throw new HttpError(400, `${what} no es válida (formato AAAA-MM-DD).`);
+  }
+  return value;
+}
+
+export function parseId(value: unknown, what: string): number {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) throw new HttpError(400, `Falta ${what}.`);
+  return id;
 }

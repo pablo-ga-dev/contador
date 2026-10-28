@@ -20,15 +20,32 @@ export async function api(method, path, body) {
   return data;
 }
 
-const PAGES = [['/', 'Tiempos'], ['/clientes', 'Clientes'], ['/ajustes', 'Ajustes']];
+/** Menú: ruta, texto y si es solo para administradores. */
+const PAGES = [
+  ['/', 'Tiempos', false],
+  ['/estadisticas', 'Estadísticas', false],
+  ['/clientes', 'Clientes', false],
+  ['/equipo', 'Equipo', true],
+  ['/ajustes', 'Ajustes', false],
+];
 
-/** Comprueba la sesión y pinta la cabecera con el menú. Devuelve el usuario. */
-export async function startPage(current) {
+export const isAdmin = (me) => me.role === 'admin';
+
+/**
+ * Comprueba la sesión y pinta la cabecera con el menú. Devuelve el usuario.
+ * Con adminOnly, a quien no es administrador lo lleva a la página principal.
+ */
+export async function startPage(current, { adminOnly = false } = {}) {
   const me = await api('GET', '/api/auth/me');
+  if (adminOnly && !isAdmin(me)) {
+    location.href = '/';
+    return new Promise(() => {}); // La página se va: que no siga pintando.
+  }
   const header = document.createElement('header');
   const title = brand();
   const nav = document.createElement('nav');
-  for (const [href, label] of PAGES) {
+  for (const [href, label, onlyAdmin] of PAGES) {
+    if (onlyAdmin && !isAdmin(me)) continue;
     const a = document.createElement('a');
     a.href = href;
     a.textContent = label;
@@ -38,7 +55,7 @@ export async function startPage(current) {
   const who = document.createElement('span');
   who.className = 'who';
   who.id = 'who';
-  who.textContent = me.name;
+  who.textContent = isAdmin(me) ? `${me.name} · admin` : me.name;
   const logout = document.createElement('button');
   logout.textContent = 'Salir';
   logout.addEventListener('click', async () => {
