@@ -60,10 +60,18 @@ clientRoutes.delete('/:id', requireAdmin, async (c) => {
 
     const moved = await tx.one<{ seconds: number }>(sql`
       SELECT COALESCE(SUM(seconds), 0) AS seconds FROM day_items WHERE client_id = ${id}`);
-    await tx.exec(sql`
-      UPDATE day_items
-         SET client_id = ${moveTo}, bucket = ${moveTo === null ? 'unassigned' : 'client'}
-       WHERE client_id = ${id}`);
+    if (moveTo !== null) {
+      await tx.exec(sql`UPDATE day_items SET client_id = ${moveTo} WHERE client_id = ${id}`);
+    } else {
+      // "Sin cliente" se guarda solo como total del día: se suma ahí y se quita el detalle.
+      await tx.exec(sql`
+        UPDATE days d
+          JOIN (SELECT user_id, date, SUM(seconds) AS seconds FROM day_items
+                 WHERE client_id = ${id} GROUP BY user_id, date) m
+            ON m.user_id = d.user_id AND m.date = d.date
+           SET d.unassigned_seconds = d.unassigned_seconds + m.seconds`);
+      await tx.exec(sql`DELETE FROM day_items WHERE client_id = ${id}`);
+    }
 
     // Comentarios: si el destino ya tiene uno ese día, se juntan los dos.
     const notes = await tx.query<{ id: number; user_id: number; date: string; note: string }>(sql`

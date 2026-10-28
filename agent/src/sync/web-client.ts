@@ -57,23 +57,29 @@ export class WebClient {
   }
 
   /**
-   * Envía un día con sus comentarios. Lo marcado como "Personal" se queda fuera, y
-   * también los comentarios de clientes a los que al final no se asignó tiempo.
+   * Envía un día con sus comentarios. Lo marcado como "Personal" se queda fuera; de
+   * "Sin cliente" solo va el total (unassignedSeconds), sin decir qué webs o apps fueron.
+   * Tampoco van los comentarios de clientes a los que al final no se asignó tiempo.
    */
   putDay(date: string, items: Assignment[], notes: DayNote[] = []): Promise<unknown> {
+    const unassignedSeconds = items.filter((i) => i.bucket === 'unassigned').reduce((s, i) => s + i.seconds, 0);
     const sent = items
-      .filter((i) => i.bucket !== 'personal')
+      .filter((i) => i.bucket === 'client' || i.bucket === 'internal')
       .map((i) => ({
         kind: i.kind,
         key: i.key,
         seconds: i.seconds,
         bucket: i.bucket,
         clientId: i.bucket === 'client' ? i.clientId : null,
-        remember: i.bucket === 'client' && i.remember,
+        remember: i.bucket === 'client' && i.kind !== 'manual' && i.remember,
       }));
     const clients = new Set(sent.filter((i) => i.clientId !== null).map((i) => i.clientId));
     const sentNotes = notes.filter((n) => n.text.trim() && (n.clientId === null || clients.has(n.clientId)));
-    return this.request('PUT', `/api/days/${date}`, { items: sent, notes: sentNotes });
+    return this.request('PUT', `/api/days/${date}`, {
+      items: sent,
+      unassignedSeconds: Math.min(unassignedSeconds, 24 * 3600),
+      notes: sentNotes,
+    });
   }
 
   private async request<T>(method: string, path: string, body?: unknown, credentials?: Credentials): Promise<T> {

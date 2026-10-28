@@ -5,8 +5,9 @@ import { config } from '../config.ts';
 import { dayRange, localDate } from '../core/day-range.ts';
 import { pendingDays } from '../core/pending-days.ts';
 import { MAX_REMINDER_HOURS, MIN_REMINDER_HOURS, reminderSettings } from '../core/reminders.ts';
+import { MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, retentionDays, type Retention } from '../core/retention.ts';
 import { autostartStatus, setAutostart } from '../autostart.ts';
-import type { ActivityKind, Assignment, Bucket, DayNote } from '../core/types.ts';
+import type { Assignment, Bucket, DayNote } from '../core/types.ts';
 import type { BrowserReceiver } from '../sources/browser/browser-receiver.ts';
 import type { ReviewStore } from '../storage/review-store.ts';
 import type { SegmentStore } from '../storage/segment-store.ts';
@@ -35,8 +36,11 @@ const MIN_IDLE_MINUTES = 1;
 const MAX_IDLE_MINUTES = 60;
 /** Igual que en la web: un comentario no puede pasar de aquí. */
 const MAX_NOTE_LENGTH = 2000;
-const KINDS: ActivityKind[] = ['domain', 'chat', 'app'];
+const KINDS: Assignment['kind'][] = ['domain', 'chat', 'app', 'manual'];
 const BUCKETS: Bucket[] = ['client', 'internal', 'unassigned', 'personal'];
+/** Igual que en la web: longitud máxima de una clave (y de la descripción del tiempo manual). */
+const MAX_KEY_LENGTH = 255;
+const DAY_SECONDS = 24 * 3600;
 
 class RequestError extends Error {
   status: number;
@@ -56,6 +60,7 @@ export interface LocalServerDeps {
   browser: BrowserReceiver;
   web: WebClient;
   sync: DaySync;
+  retention: Retention;
   /** Para el agente (cierra bien el tramo actual y sale). */
   onShutdown: () => void;
 }
@@ -166,6 +171,9 @@ export class LocalServer {
     }
     if (method === 'PUT' && url.pathname === '/api/settings/tracking') {
       return sendJson(res, 200, this.saveTracking(await readJson(req)));
+    }
+    if (method === 'PUT' && url.pathname === '/api/settings/retention') {
+      return sendJson(res, 200, this.saveRetention(await readJson(req)));
     }
     if (method === 'POST' && url.pathname === '/api/sync') {
       await this.deps.sync.sendPending();
@@ -298,6 +306,7 @@ export class LocalServer {
         lastError: unsent.find((d) => d.lastError)?.lastError ?? null,
       },
       idleMinutes: Number(reviews.getSetting('idleMinutes') ?? config.idleThresholdSeconds / 60),
+      retentionDays: retentionDays(reviews),
       reminders: reminderSettings(reviews),
       dataFile: dbFile,
     };
@@ -333,6 +342,16 @@ export class LocalServer {
     }
     this.deps.reviews.setSetting('idleMinutes', String(minutes));
     return this.settings();
+  }
+
+  /** Cambia el tiempo de guardado y borra en el momento lo que ya haya quedado fuera. */
+  private saveRetention(body: Record<string, unknown>) {
+    const days = Number(body.retentionDays);
+    if (!Number.isInteger(days) || days < MIN_RETENTION_DAYS || days > MAX_RETENTION_DAYS) {
+      throw new RequestError(400, `Los días deben ser un número entero entre ${MIN_RETENTION_DAYS} y ${MAX_RETENTION_DAYS}.`);
+    }
+    this.deps.reviews.setSetting('retentionDays', String(days));
+    return { ...this.settings(), deletedDays: this.deps.retention.run() };
   }
 
   /** Comprueba la conexión con los datos nuevos antes de guardarlos. */
@@ -394,19 +413,26 @@ function parseNotes(raw: unknown): DayNote[] {
 function parseAssignment(raw: unknown, index: number): Assignment {
   const where = `la actividad ${index + 1}`;
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  if (!KINDS.includes(r.kind as ActivityKind)) throw new RequestError(400, `${where}: tipo no válido.`);
+  if (!KINDS.includes(r.kind as Assignment['kind'])) throw new RequestError(400, `${where}: tipo no válido.`);
   if (!BUCKETS.includes(r.bucket as Bucket)) throw new RequestError(400, `${where}: asignación no válida.`);
-  if (typeof r.key !== 'string' || !r.key) throw new RequestError(400, `${where}: falta la clave.`);
-  if (typeof r.seconds !== 'number' || r.seconds < 0) throw new RequestError(400, `${where}: tiempo no válido.`);
+  const key = typeof r.key === 'string' ? r.key.trim() : '';
+  if (!key) throw new RequestError(400, r.kind === 'manual' ? `${where}: falta la descripción.` : `${where}: falta la clave.`);
+  if (key.length > MAX_KEY_LENGTH) throw new RequestError(400, `${where}: el texto es demasiado largo.`);
+  if (typeof r.seconds !== 'number' || r.seconds < 0 || r.seconds > DAY_SECONDS) {
+    throw new RequestError(400, `${where}: tiempo no válido.`);
+  }
+  if (r.kind === 'manual' && r.bucket !== 'client' && r.bucket !== 'internal') {
+    throw new RequestError(400, `${where}: el tiempo manual va a un cliente o a interno.`);
+  }
   const isClient = r.bucket === 'client';
   if (isClient && typeof r.clientId !== 'number') throw new RequestError(400, `${where}: falta el cliente.`);
   return {
-    kind: r.kind as ActivityKind,
-    key: r.key,
+    kind: r.kind as Assignment['kind'],
+    key,
     seconds: Math.round(r.seconds),
     bucket: r.bucket as Bucket,
     clientId: isClient ? (r.clientId as number) : null,
-    remember: isClient && r.remember === true,
+    remember: isClient && r.kind !== 'manual' && r.remember === true,
   };
 }
 

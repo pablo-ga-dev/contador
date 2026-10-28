@@ -38,8 +38,9 @@ function checkPerson(user: User, userId: number): void {
 // --- Semana por persona y día ------------------------------------------------
 
 /**
- * Semana por persona: para cada usuario y día (de lunes a domingo), el tiempo
- * confirmado por tipo. Un día sin confirmar no aparece.
+ * Semana por persona: para cada usuario y día (de lunes a domingo), el tiempo por
+ * tipo. "Sin cliente" es solo el total que envía el agente. Un día sin nada no aparece;
+ * confirmed dice si el agente lo ha confirmado (si no, solo tiene tiempo manual).
  */
 reportRoutes.get('/week', async (c) => {
   const user = c.get('user');
@@ -49,33 +50,42 @@ reportRoutes.get('/week', async (c) => {
 
   const users = await db.query<{ id: number; name: string }>(sql`
     SELECT id, name FROM users u WHERE ${mine(user, 'u.id')} ORDER BY name`);
-  const rows = await db.query<{ user_id: number; date: string; bucket: Bucket | null; seconds: number }>(sql`
-    SELECT d.user_id, d.date, i.bucket, COALESCE(SUM(i.seconds), 0) AS seconds
+  const rows = await db.query<{ user_id: number; date: string; confirmed_at: string | null; unassigned: number; client: number; internal: number }>(sql`
+    SELECT d.user_id, d.date, d.confirmed_at, d.unassigned_seconds AS unassigned,
+           COALESCE(SUM(CASE WHEN i.bucket = 'client' THEN i.seconds END), 0) AS client,
+           COALESCE(SUM(CASE WHEN i.bucket = 'internal' THEN i.seconds END), 0) AS internal
       FROM days d LEFT JOIN day_items i ON i.user_id = d.user_id AND i.date = d.date
      WHERE d.date BETWEEN ${start} AND ${end} AND ${mine(user, 'd.user_id')}
-     GROUP BY d.user_id, d.date, i.bucket`);
+     GROUP BY d.user_id, d.date, d.confirmed_at, d.unassigned_seconds`);
 
-  const byUser = new Map(users.map((u) => [u.id, { ...u, days: {} as Record<string, Totals> }]));
+  const byUser = new Map(users.map((u) => [u.id, { ...u, days: {} as Record<string, Totals & { confirmed: boolean }> }]));
   for (const r of rows) {
     const person = byUser.get(r.user_id);
     if (!person) continue;
-    const day = (person.days[r.date] ??= { client: 0, internal: 0, unassigned: 0 });
-    if (r.bucket) day[r.bucket] += Number(r.seconds);
+    person.days[r.date] = {
+      client: Number(r.client),
+      internal: Number(r.internal),
+      unassigned: Number(r.unassigned),
+      confirmed: r.confirmed_at !== null,
+    };
   }
   return c.json({ days, users: [...byUser.values()] });
 });
 
-/** Detalle de un día de una persona: por cliente (o interno / sin cliente), con sus actividades. */
+/**
+ * Detalle de un día de una persona: por cliente (o interno), con sus actividades, y el
+ * total sin cliente (sin detalle). Lo apuntado a mano en la web lleva su id para borrarlo.
+ */
 reportRoutes.get('/day', async (c) => {
   const date = parseDate(c.req.query('date'));
   const userId = parseId(c.req.query('userId'), 'la persona');
   checkPerson(c.get('user'), userId);
   const person = await db.one<{ id: number; name: string }>(sql`SELECT id, name FROM users WHERE id = ${userId}`);
   if (!person) throw new HttpError(404, 'Esa persona no existe.');
-  const day = await db.one<{ confirmed_at: string }>(sql`
-    SELECT confirmed_at FROM days WHERE user_id = ${userId} AND date = ${date}`);
+  const day = await db.one<{ confirmed_at: string | null; unassigned_seconds: number }>(sql`
+    SELECT confirmed_at, unassigned_seconds FROM days WHERE user_id = ${userId} AND date = ${date}`);
   const items = await db.query<ItemRow>(sql`
-    SELECT i.bucket, i.client_id, c.name AS client_name, i.kind, i.activity_key AS \`key\`, i.seconds
+    SELECT i.id, i.source, i.bucket, i.client_id, c.name AS client_name, i.kind, i.activity_key AS \`key\`, i.seconds
       FROM day_items i LEFT JOIN clients c ON c.id = i.client_id
      WHERE i.user_id = ${userId} AND i.date = ${date}
      ORDER BY i.seconds DESC`);
@@ -90,6 +100,7 @@ reportRoutes.get('/day', async (c) => {
     user: person,
     date,
     confirmedAt: iso(day?.confirmed_at ?? null),
+    unassignedSeconds: Number(day?.unassigned_seconds ?? 0),
     note: notes.find((n) => n.client_id === null)?.note ?? null,
     groups,
   });
@@ -122,14 +133,25 @@ reportRoutes.get('/range/clients/detail', async (c) => {
   return c.json({ from, to, ...detail });
 });
 
+/** Total sin cliente por persona entre dos fechas (solo se guarda el total de cada día). */
+function unassignedByUser(user: User, from: string, to: string) {
+  return db.query<{ user_id: number; user_name: string; seconds: number }>(sql`
+    SELECT d.user_id, u.name AS user_name, SUM(d.unassigned_seconds) AS seconds
+      FROM days d JOIN users u ON u.id = d.user_id
+     WHERE d.date >= ${from} AND d.date < ${to} AND d.unassigned_seconds > 0 AND ${mine(user, 'd.user_id')}
+     GROUP BY d.user_id, u.name`);
+}
+
 async function clientGroups(user: User, from: string, to: string) {
-  const rows = await db.query<{ bucket: Bucket; client_id: number | null; client_name: string | null; user_id: number; user_name: string; seconds: number }>(sql`
+  const items = await db.query<{ bucket: Bucket; client_id: number | null; client_name: string | null; user_id: number; user_name: string; seconds: number }>(sql`
     SELECT i.bucket, i.client_id, c.name AS client_name, i.user_id, u.name AS user_name, SUM(i.seconds) AS seconds
       FROM day_items i
       JOIN users u ON u.id = i.user_id
       LEFT JOIN clients c ON c.id = i.client_id
      WHERE i.date >= ${from} AND i.date < ${to} AND ${mine(user, 'i.user_id')}
      GROUP BY i.bucket, i.client_id, c.name, i.user_id, u.name`);
+  const unassigned = await unassignedByUser(user, from, to);
+  const rows = [...items, ...unassigned.map((u) => ({ ...u, bucket: 'unassigned' as const, client_id: null, client_name: null }))];
 
   const groups = new Map<string, { bucket: Bucket; clientId: number | null; name: string; seconds: number; byUser: { userId: number; name: string; seconds: number }[] }>();
   for (const r of rows) {
@@ -156,6 +178,19 @@ async function clientDetail(user: User, from: string, to: string, clientParam?: 
     const client = await db.one<{ name: string }>(sql`SELECT name FROM clients WHERE id = ${clientId}`);
     if (!client) throw new HttpError(404, 'Ese cliente no existe.');
     name = client.name;
+  }
+  // Sin cliente no tiene detalle de actividades: solo el total de cada día.
+  if (bucketParam === 'unassigned') {
+    const people = await unassignedByUser(user, from, to);
+    const byDay = await db.query(sql`
+      SELECT d.date, SUM(d.unassigned_seconds) AS seconds
+        FROM days d
+       WHERE d.date >= ${from} AND d.date < ${to} AND d.unassigned_seconds > 0 AND ${mine(user, 'd.user_id')}
+       GROUP BY d.date ORDER BY d.date`);
+    const byUser = people
+      .map((p) => ({ userId: p.user_id, name: p.user_name, seconds: Number(p.seconds) }))
+      .sort((a, b) => b.seconds - a.seconds);
+    return { clientId, name, activities: [], byUser, byDay, notes: [] };
   }
   const match = clientId === null ? sql`i.bucket = ${bucketParam!}` : sql`i.client_id = ${clientId}`;
   const where = sql`${match} AND i.date >= ${from} AND i.date < ${to} AND ${mine(user, 'i.user_id')}`;
@@ -190,19 +225,26 @@ reportRoutes.get('/range/users', async (c) => {
   const { from, to, toExclusive } = parseRange(c.req.query('from'), c.req.query('to'));
   const rows = await db.query<{ id: number; name: string; client: number; internal: number; unassigned: number; days: number }>(sql`
     SELECT u.id, u.name,
-           COALESCE(SUM(CASE WHEN i.bucket = 'client' THEN i.seconds END), 0) AS client,
-           COALESCE(SUM(CASE WHEN i.bucket = 'internal' THEN i.seconds END), 0) AS internal,
-           COALESCE(SUM(CASE WHEN i.bucket = 'unassigned' THEN i.seconds END), 0) AS unassigned,
-           COUNT(DISTINCT i.date) AS days
+           COALESCE(it.client, 0) AS client, COALESCE(it.internal, 0) AS internal,
+           COALESCE(d.unassigned, 0) AS unassigned, COALESCE(d.days, 0) AS days
       FROM users u
-      LEFT JOIN day_items i ON i.user_id = u.id AND i.date >= ${from} AND i.date < ${toExclusive}
+      LEFT JOIN (
+        SELECT user_id,
+               SUM(CASE WHEN bucket = 'client' THEN seconds ELSE 0 END) AS client,
+               SUM(CASE WHEN bucket = 'internal' THEN seconds ELSE 0 END) AS internal
+          FROM day_items WHERE date >= ${from} AND date < ${toExclusive}
+         GROUP BY user_id) it ON it.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, SUM(unassigned_seconds) AS unassigned, COUNT(*) AS days
+          FROM days WHERE date >= ${from} AND date < ${toExclusive}
+         GROUP BY user_id) d ON d.user_id = u.id
      WHERE ${mine(user, 'u.id')}
-     GROUP BY u.id, u.name
      ORDER BY u.name`);
+  // total: tiempo de uso (todo lo enviado); used: la parte asignada a clientes o a interno.
   const users = rows.map((r) => {
-    const total = Number(r.client) + Number(r.internal) + Number(r.unassigned);
+    const used = Number(r.client) + Number(r.internal);
     return {
-      id: r.id, name: r.name, total,
+      id: r.id, name: r.name, total: used + Number(r.unassigned), used,
       client: Number(r.client), internal: Number(r.internal), unassigned: Number(r.unassigned),
       days: Number(r.days),
     };
@@ -219,7 +261,7 @@ reportRoutes.get('/range/users/:id', async (c) => {
   if (!person) throw new HttpError(404, 'Esa persona no existe.');
   const where = sql`i.user_id = ${userId} AND i.date >= ${from} AND i.date < ${toExclusive}`;
 
-  const [groups, activities, byDay] = await Promise.all([
+  const [groups, activities, itemDays, unassignedDays] = await Promise.all([
     db.query<{ bucket: Bucket; client_id: number | null; name: string | null; seconds: number }>(sql`
       SELECT i.bucket, i.client_id, c.name, SUM(i.seconds) AS seconds
         FROM day_items i LEFT JOIN clients c ON c.id = i.client_id WHERE ${where}
@@ -228,14 +270,23 @@ reportRoutes.get('/range/users/:id', async (c) => {
       SELECT i.kind, i.activity_key AS \`key\`, SUM(i.seconds) AS seconds
         FROM day_items i WHERE ${where}
        GROUP BY i.kind, i.activity_key ORDER BY seconds DESC LIMIT ${TOP_ACTIVITIES}`),
-    db.query(sql`
+    db.query<{ date: string; seconds: number }>(sql`
       SELECT i.date, SUM(i.seconds) AS seconds
         FROM day_items i WHERE ${where}
-       GROUP BY i.date ORDER BY i.date`),
+       GROUP BY i.date`),
+    db.query<{ date: string; seconds: number }>(sql`
+      SELECT date, unassigned_seconds AS seconds FROM days
+       WHERE user_id = ${userId} AND date >= ${from} AND date < ${toExclusive} AND unassigned_seconds > 0`),
   ]);
   const byClient = groups
-    .map((g) => ({ bucket: g.bucket, clientId: g.client_id, name: g.name ?? '', seconds: Number(g.seconds) }))
-    .sort((a, b) => bucketOrder(a) - bucketOrder(b) || b.seconds - a.seconds);
+    .map((g) => ({ bucket: g.bucket, clientId: g.client_id, name: g.name ?? '', seconds: Number(g.seconds) }));
+  const unassigned = unassignedDays.reduce((s, d) => s + Number(d.seconds), 0);
+  if (unassigned > 0) byClient.push({ bucket: 'unassigned', clientId: null, name: '', seconds: unassigned });
+  byClient.sort((a, b) => bucketOrder(a) - bucketOrder(b) || b.seconds - a.seconds);
+  // Por día, el tiempo de uso: lo asignado más lo que quedó sin cliente.
+  const perDay = new Map<string, number>();
+  for (const d of [...itemDays, ...unassignedDays]) perDay.set(d.date, (perDay.get(d.date) ?? 0) + Number(d.seconds));
+  const byDay = [...perDay].sort(([a], [b]) => a.localeCompare(b)).map(([date, seconds]) => ({ date, seconds }));
   return c.json({ from, to, user: person, byClient, activities, byDay });
 });
 
@@ -310,6 +361,8 @@ reportRoutes.get('/clients/:id', async (c) => {
 // --- Utilidades ------------------------------------------------------------------
 
 interface ItemRow {
+  id: number;
+  source: 'agent' | 'web';
   bucket: Bucket;
   client_id: number | null;
   client_name: string | null;
@@ -321,12 +374,13 @@ interface ItemRow {
 const bucketOrder = (g: { bucket: Bucket }) => ({ client: 0, internal: 1, unassigned: 2 })[g.bucket];
 
 function groupItems(items: ItemRow[]) {
-  const groups = new Map<string, { bucket: Bucket; clientId: number | null; name: string; seconds: number; items: { kind: string; key: string; seconds: number }[] }>();
+  const groups = new Map<string, { bucket: Bucket; clientId: number | null; name: string; seconds: number; items: { id: number | null; kind: string; key: string; seconds: number }[] }>();
   for (const i of items) {
     const id = i.bucket === 'client' ? `c${i.client_id}` : i.bucket;
     const group = groups.get(id) ?? { bucket: i.bucket, clientId: i.client_id, name: i.client_name ?? '', seconds: 0, items: [] };
     group.seconds += i.seconds;
-    group.items.push({ kind: i.kind, key: i.key, seconds: i.seconds });
+    // Solo lo apuntado en la web lleva id: es lo que se puede borrar desde la web.
+    group.items.push({ id: i.source === 'web' ? i.id : null, kind: i.kind, key: i.key, seconds: i.seconds });
     groups.set(id, group);
   }
   return [...groups.values()].sort((a, b) => bucketOrder(a) - bucketOrder(b) || b.seconds - a.seconds);

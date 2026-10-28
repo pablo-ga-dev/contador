@@ -148,8 +148,23 @@
     <h2>Datos en este PC</h2>
     <p class="help">
       Todo lo que registra el agente se guarda solo aquí. A la web solo llega lo que
-      confirmas en «Revisar día», y nunca lo marcado como Personal.
+      confirmas en «Revisar día»: nunca lo marcado como Personal, y de «Sin cliente»
+      solo el total del día, no qué webs o apps fueron.
     </p>
+    <form id="retention-form">
+      <div class="row">
+        <label style="margin: 0">Guardar el detalle durante
+          <input type="number" name="retentionDays" min="7" max="365" step="1" required> días
+        </label>
+        <button type="submit">Guardar</button>
+        <span class="msg" id="retention-msg"></span>
+      </div>
+      <p class="help">
+        Pasado ese tiempo, la actividad de cada día (webs, apps, chats y lo que quedó sin
+        cliente) se borra de este PC. Lo ya enviado sigue en la web; lo que no se haya
+        podido enviar se conserva hasta que se envíe.
+      </p>
+    </form>
     <dl class="facts"><dt>Archivo</dt><dd><code class="path" id="data-file"></code></dd></dl>
   </section>
 </main>
@@ -196,6 +211,7 @@
     $('sync-now').disabled = s.sync.unsent.length === 0;
 
     $('tracking-form').idleMinutes.value = s.idleMinutes;
+    $('retention-form').retentionDays.value = s.retentionDays;
     const reminders = $('reminders-form');
     reminders.enabled.checked = s.reminders.enabled;
     reminders.hours.value = s.reminders.hours;
@@ -308,6 +324,19 @@
       say('tracking-msg', 'Guardado.', 'ok');
     } catch (err) {
       say('tracking-msg', err.message);
+    }
+  });
+
+  $('retention-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const days = Number(e.target.retentionDays.value);
+    try {
+      const result = await api('PUT', '/api/settings/retention', { retentionDays: days });
+      render(result);
+      const n = result.deletedDays;
+      say('retention-msg', n ? `Guardado. Se ${n === 1 ? 'ha borrado 1 día antiguo' : `han borrado ${n} días antiguos`}.` : 'Guardado.', 'ok');
+    } catch (err) {
+      say('retention-msg', err.message);
     }
   });
 

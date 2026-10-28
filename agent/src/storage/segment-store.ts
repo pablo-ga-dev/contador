@@ -117,6 +117,11 @@ export class SegmentStore {
     return rows.map((r) => String(r.day));
   }
 
+  /** Borra los tramos que empezaron antes de `before`. */
+  deleteBefore(before: Date): void {
+    this.db.prepare('DELETE FROM segments WHERE started_at < ?').run(before.toISOString());
+  }
+
   /** El tramo más reciente, o null si no hay ninguno. */
   latest(): Segment | null {
     const row = this.db

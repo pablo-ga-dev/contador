@@ -2,6 +2,7 @@ import path from 'node:path';
 import { migrateLegacyAutostart } from './autostart.ts';
 import { config } from './config.ts';
 import { Reminders } from './core/reminders.ts';
+import { Retention } from './core/retention.ts';
 import { Tracker } from './core/tracker.ts';
 import { openPanelWindow } from './open-window.ts';
 import { LocalServer } from './server/local-server.ts';
@@ -31,8 +32,9 @@ const sync = new DaySync(reviews, web);
 const idleMinutes = () => Number(reviews.getSetting('idleMinutes') ?? config.idleThresholdSeconds / 60);
 const tracker = new Tracker(segments, browser, () => idleMinutes() * 60);
 const reminders = new Reminders({ segments, reviews, open: openPanelWindow });
+const retention = new Retention(segments, reviews);
 const server = new LocalServer({
-  port: config.port, dbFile, segments, reviews, browser, web, sync, onShutdown: shutdown,
+  port: config.port, dbFile, segments, reviews, browser, web, sync, retention, onShutdown: shutdown,
 });
 
 // Si el puerto está ocupado es que ya hay otro agente: no arrancamos un segundo,
@@ -45,6 +47,7 @@ try {
   db.close();
   process.exit(busy ? 0 : 1);
 }
+retention.start();
 sync.start();
 reminders.start();
 windows.start((sample) => tracker.handle(sample));
@@ -58,6 +61,7 @@ function shutdown(): void {
   tracker.stopAt(new Date());
   windows.stop();
   reminders.stop();
+  retention.stop();
   sync.stop();
   server.stop();
   db.close();

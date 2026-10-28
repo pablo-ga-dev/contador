@@ -125,6 +125,8 @@ Tiene tres páginas:
   Claude o Figma) entre varios clientes: cada parte tiene su tiempo (`1:30`,
   `90` o `1h30`) y su cliente, y la primera se queda con lo que sobra, así que
   la suma siempre cuadra. Una actividad dividida no se guarda como regla.
+  **+ Añadir tiempo manual** apunta lo que no hiciste en el ordenador (una
+  reunión, una llamada): descripción, tiempo y cliente o Interno.
   Debajo, **comentarios** opcionales: uno del día y uno por cada
   cliente con tiempo asignado (qué hiciste para él). **Confirmar y enviar**
   manda el día y sus comentarios a la web; si no hay conexión se guarda y se
@@ -142,9 +144,15 @@ Tiene tres páginas:
     una vez al día y solo si estás delante del PC.
   - *Arranque automático*: activarlo o desactivarlo. Avisa si el proyecto se
     ha movido de carpeta y hay que volver a activarlo.
-  - *Datos en este PC*: dónde se guarda todo.
+  - *Datos en este PC*: dónde se guarda todo y **cuántos días se guarda el
+    detalle** (por defecto 60, de 7 a 365). Pasado ese tiempo, la actividad de
+    cada día se borra sola del PC (al arrancar y cada 6 horas); lo que no se
+    haya podido enviar se conserva hasta que se envíe.
 
-Lo marcado como **Personal** no sale nunca del PC.
+Lo marcado como **Personal** no sale nunca del PC. De **Sin cliente** solo se
+envía el total del día (para el tiempo de uso y el porcentaje utilizado), no qué
+webs o apps fueron: ese detalle se queda en el PC hasta que pasa el tiempo de
+guardado.
 
 ### Resumen por consola
 
@@ -210,14 +218,20 @@ temporal nueva y cierra sus sesiones) y `npm run set-role -- su@email.com admin`
 ### Qué hace ya
 
 - **Tiempos** (página principal), con dos vistas:
-  - *Por persona y día*: una semana con el tiempo confirmado de cada persona
-    cada día; al pulsar un día se ve por cliente, con sus webs, chats y apps.
+  - *Por persona y día*: una semana con el tiempo de uso de cada persona cada
+    día; al pulsar un día se ve el **tiempo de uso**, lo **asignado** y el
+    **% utilizado**, y el reparto por cliente con sus webs, chats, apps y tiempo
+    manual. Sin cliente aparece solo como total.
   - *Por cliente y mes*: el total de cada cliente (y de Interno y Sin cliente)
     con el reparto por persona; al pulsar uno se ven sus actividades, personas y días.
   Un usuario solo ve los suyos (ver Roles).
+- **+ Añadir tiempo** (en Tiempos): cada persona apunta a mano tiempo suyo de
+  cualquier día hasta hoy (día, tiempo, cliente o Interno y descripción). Lo
+  puede borrar desde el detalle del día. Si el día aún no se ha confirmado en la
+  app, aparece en cursiva; al confirmarlo, lo apuntado en la web se conserva.
 - **Estadísticas**: entre las fechas que se elijan (con atajos: este mes, mes
-  pasado, últimos 30 días, este año), por **personas** (total, clientes,
-  interno, sin cliente, días y media por día) y por **clientes** (total, % y
+  pasado, últimos 30 días, este año), por **personas** (tiempo de uso, clientes,
+  interno, sin cliente, % utilizado, días y media por día) y por **clientes** (total, % y
   reparto por persona). Al pulsar una fila, su detalle: por cliente o por
   persona, webs, chats y apps, gráfico por día (por mes en rangos largos) y
   comentarios.
@@ -254,11 +268,16 @@ temporal nueva y cierra sus sesiones) y `npm run set-role -- su@email.com admin`
   - `GET /api/clients` y `GET /api/rules` (qué cliente se preselecciona para
     cada dominio, chat o app; compartidas por todo el equipo).
   - `PUT /api/days/AAAA-MM-DD`: el día confirmado, actividad por actividad
-    (cliente, interno o sin cliente), con sus comentarios (`notes`). Volver a
-    enviarlo lo sustituye. Las actividades marcadas para recordar actualizan
-    las reglas.
+    (cliente o interno, y el tiempo manual con `kind: "manual"`), el total sin
+    cliente (`unassignedSeconds`) y sus comentarios (`notes`). Volver a enviarlo
+    sustituye lo que envió el agente; lo apuntado en la web se conserva. Las
+    actividades marcadas para recordar actualizan las reglas.
+  - `POST /api/days/AAAA-MM-DD/manual` y `DELETE /api/days/manual/:id`: tiempo
+    manual desde la web (cada uno el suyo).
 
-Lo marcado como **Personal** en la revisión nunca se envía.
+Lo marcado como **Personal** en la revisión nunca se envía, y de Sin cliente
+solo llega el total. El **tiempo de uso** es todo lo enviado (asignado más sin
+cliente); el **% utilizado**, la parte asignada a clientes o a interno.
 
 ## Privacidad
 

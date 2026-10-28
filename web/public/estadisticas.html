@@ -88,7 +88,8 @@
 </main>
 <script type="module">
   import {
-    KIND_LABELS, activityLabel, addDays, api, capitalize, el, fmtDate, formatDuration, groupLabel, isAdmin, startPage, todayISO,
+    KIND_LABELS, UNASSIGNED_HINT, activityLabel, addDays, api, capitalize, el, fmtDate, formatDuration, groupLabel, isAdmin,
+    startPage, todayISO, usedPercent,
   } from '/app.js';
 
   const $ = (id) => document.getElementById(id);
@@ -183,11 +184,11 @@
   async function loadPeople() {
     const { users } = await api('GET', `/api/reports/range/users?from=${state.from}&to=${state.to}`);
     const total = users.reduce((s, u) => s + u.total, 0);
-    const clients = users.reduce((s, u) => s + u.client, 0);
+    const used = users.reduce((s, u) => s + u.used, 0);
     const days = users.reduce((s, u) => s + u.days, 0);
     kpis([
-      ['Total', formatDuration(total)],
-      ['En clientes', total ? `${Math.round((clients / total) * 100)} %` : '—'],
+      ['Tiempo de uso', formatDuration(total)],
+      ['Utilizado (clientes e interno)', usedPercent(used, total)],
       [isAdmin(me) ? 'Personas con tiempo' : 'Días con tiempo', isAdmin(me) ? String(users.filter((u) => u.total).length) : String(days)],
       ['Media por día con tiempo', days ? formatDuration(total / days) : '—'],
     ]);
@@ -195,7 +196,7 @@
     const table = $('table');
     table.replaceChildren();
     const head = el('tr');
-    for (const [h, n] of [['Persona', false], ['Total', true], ['Clientes', true], ['Interno', true], ['Sin cliente', true], ['Días', true], ['Media/día', true]]) head.append(el('th', n ? 'n' : '', h));
+    for (const [h, n] of [['Persona', false], ['Tiempo de uso', true], ['Clientes', true], ['Interno', true], ['Sin cliente', true], ['Utilizado', true], ['Días', true], ['Media/día', true]]) head.append(el('th', n ? 'n' : '', h));
     table.append(head);
     const max = Math.max(1, ...users.map((u) => u.total));
     for (const u of users) {
@@ -210,6 +211,7 @@
         el('td', 'n num', formatDuration(u.client)),
         el('td', 'n num', formatDuration(u.internal)),
         el('td', 'n num', formatDuration(u.unassigned)),
+        el('td', 'n num', usedPercent(u.used, u.total)),
         el('td', 'n num', String(u.days)),
         el('td', 'n num', u.days ? formatDuration(u.total / u.days) : '—'),
       );
@@ -230,7 +232,11 @@
     detail.replaceChildren();
     const head = el('div', 'detail-head');
     const total = d.byClient.reduce((s, g) => s + g.seconds, 0);
-    head.append(el('h3', '', `${d.user.name} · del ${short(d.from)} al ${short(d.to)}`), el('span', 'muted num', `Total ${formatDuration(total)}`));
+    const used = d.byClient.filter((g) => g.bucket !== 'unassigned').reduce((s, g) => s + g.seconds, 0);
+    head.append(
+      el('h3', '', `${d.user.name} · del ${short(d.from)} al ${short(d.to)}`),
+      el('span', 'muted num', `Uso ${formatDuration(total)} · ${usedPercent(used, total)} utilizado`),
+    );
     const cols = el('div', 'cols');
     cols.append(
       section('Por cliente', lines(d.byClient.map((g) => [groupLabel(g), g.seconds, g.bucket !== 'client']), total)),
@@ -291,7 +297,7 @@
     const head = el('div', 'detail-head');
     head.append(el('h3', '', `${d.name} · del ${short(d.from)} al ${short(d.to)}`), el('span', 'muted num', `Total ${formatDuration(g.seconds)}`));
     const cols = el('div', 'cols');
-    cols.append(section('Webs, chats y apps', activityLines(d.activities)));
+    cols.append(section('Webs, chats y apps', g.bucket === 'unassigned' ? el('p', 'muted', UNASSIGNED_HINT) : activityLines(d.activities)));
     if (isAdmin(me)) cols.append(section('Por persona', lines(d.byUser.map((u) => [u.name, u.seconds]), g.seconds)));
     cols.append(chart(d.byDay));
     if (d.notes.length) {

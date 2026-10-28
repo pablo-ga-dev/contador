@@ -5,7 +5,10 @@ import type { Assignment, DayNote } from '../core/types.ts';
 export interface ConfirmedDay {
   date: string;
   confirmedAt: string;
-  /** Todas las asignaciones, incluidas las de "Personal" (que no se envían). */
+  /**
+   * Todas las asignaciones y el tiempo apuntado a mano. "Personal" no se envía y
+   * de "Sin cliente" solo se envía el total.
+   */
   items: Assignment[];
   /** Comentarios del día: general y por cliente. */
   notes: DayNote[];
@@ -22,6 +25,7 @@ export type SettingKey =
   | 'clientsCache'
   | 'rulesCache'
   | 'idleMinutes'
+  | 'retentionDays'
   | 'reminderEnabled'
   | 'reminderHours'
   | 'startupReview'
@@ -111,6 +115,11 @@ export class ReviewStore {
     this.db
       .prepare('UPDATE confirmed_days SET sent_at = ?, last_error = NULL WHERE date = ? AND confirmed_at = ?')
       .run(new Date().toISOString(), day.date, day.confirmedAt);
+  }
+
+  /** Borra las revisiones ya enviadas de antes de `date` (AAAA-MM-DD). Las pendientes se quedan. */
+  deleteSentBefore(date: string): void {
+    this.db.prepare('DELETE FROM confirmed_days WHERE date < ? AND sent_at IS NOT NULL').run(date);
   }
 
   markError(day: ConfirmedDay, message: string): void {
