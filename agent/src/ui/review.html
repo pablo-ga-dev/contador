@@ -82,6 +82,12 @@
 
   .actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 16px; }
   .empty { color: var(--text-muted); padding: 24px 8px; text-align: center; }
+  .hours-warnings {
+    margin-top: 16px; padding: 10px 14px; border-radius: 8px;
+    border: 1px solid var(--warning); border-left-width: 4px; background: var(--surface-0);
+  }
+  .hours-warnings strong { color: var(--warning); }
+  .hours-warnings ul { margin: 4px 0 0; padding-left: 18px; }
 
   .comments { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
   .comments h3 { margin: 0 0 2px; font-size: 15px; }
@@ -131,6 +137,7 @@
       <tbody id="rows"></tbody>
     </table>
     <div class="empty" id="empty" hidden>No hay actividad registrada este día.</div>
+    <div class="hours-warnings" id="hours-warnings" role="status" hidden></div>
     <div class="comments" id="comments" hidden>
       <h3>Comentarios</h3>
       <p class="help">Opcional. Qué hiciste en el día o para cada cliente; se verá en la web junto a los tiempos.</p>
@@ -476,6 +483,50 @@
       div.append(label, strong);
       return div;
     }));
+    renderHoursWarnings(all);
+  }
+
+  // --- Horas contratadas ----------------------------------------------------
+  // La web dice cuánto le queda a cada cliente con seguimiento de horas (`hours`).
+  // Si el día ya se había enviado, ese tiempo ya está descontado: solo cuenta lo nuevo.
+
+  function hoursHint(h) {
+    if (!h) return '';
+    if (h.status === 'over') return `se ha pasado ${formatDuration(h.excess)}`;
+    if (h.status === 'exhausted') return 'sin horas';
+    return `quedan ${formatDuration(h.available)}`;
+  }
+
+  function renderHoursWarnings(all) {
+    const box = $('hours-warnings');
+    box.replaceChildren();
+    const sent = review.confirmed?.sentAt ? review.confirmed.items : [];
+    const warnings = [];
+    for (const client of catalog.clients) {
+      const h = client.hours;
+      if (!h) continue;
+      const today = all.filter((s) => s.bucket === 'client' && s.clientId === client.id).reduce((t, s) => t + s.seconds, 0);
+      const before = sent.filter((i) => i.bucket === 'client' && i.clientId === client.id).reduce((t, i) => t + i.seconds, 0);
+      const extra = today - before;
+      if (extra <= 0) continue;
+      if (extra > h.available) {
+        const over = extra - h.available + h.excess;
+        warnings.push(h.available > 0
+          ? `${client.name}: le quedan ${formatDuration(h.available)} y hoy le asignas ${formatDuration(extra)}. Se pasará ${formatDuration(over)}.`
+          : `${client.name} no tiene horas disponibles: con lo de hoy se pasará ${formatDuration(over)}.`);
+      }
+    }
+    box.hidden = warnings.length === 0;
+    if (warnings.length === 0) return;
+    const title = document.createElement('strong');
+    title.textContent = 'Horas contratadas';
+    const list = document.createElement('ul');
+    for (const w of warnings) {
+      const li = document.createElement('li');
+      li.textContent = w;
+      list.append(li);
+    }
+    box.append(title, list);
   }
 
   function renderStatus() {
@@ -553,7 +604,7 @@
       { separator: true },
       ...catalog.clients
         .filter((c) => !ql || c.name.toLowerCase().includes(ql))
-        .map((c) => ({ bucket: 'client', clientId: c.id, label: c.name })),
+        .map((c) => ({ bucket: 'client', clientId: c.id, label: c.name, hint: hoursHint(c.hours) })),
     ];
     if (q && !catalog.clients.some((c) => c.name.toLowerCase() === ql)) {
       options.push({ create: q, label: `+ Crear cliente «${q}»` });

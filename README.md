@@ -203,7 +203,20 @@ Para parar la base de datos: `npm run db:down` (los datos se conservan).
   Tiempos), por persona, sus webs, chats y apps, y los comentarios recientes.
   **Borrar cliente**: si tiene tiempo confirmado, se elige adónde pasa (a «Sin
   cliente» o a otro cliente, que sirve para unir duplicados) junto con sus
-  comentarios y reglas; nunca se pierden horas.
+  comentarios, reglas y bonos; nunca se pierden horas.
+- **Horas contratadas** (en la ficha del cliente, con la casilla «Hacer
+  seguimiento de horas»):
+  - *Horas al mes* (opcional): se renuevan cada mes y no se acumulan.
+  - *Bonos* (p. ej. 5 h): no caducan; se pueden añadir varios.
+  - Cada mes el tiempo se descuenta primero de la cuota mensual y, lo que
+    pase, de los bonos (del más antiguo al más nuevo). Lo que pase de los
+    bonos es exceso; un bono nuevo cubre primero el exceso que hubiera.
+  - Se cuenta desde la fecha que se elija al activarlo (por defecto, el día 1
+    del mes). El tiempo anterior no gasta horas.
+  - **Avisos**, solo si el cliente tiene horas contratadas: arriba en Tiempos y
+    Clientes, con una marca en la lista («Agotado» o «+30 min»). En el agente,
+    el selector de «Revisar día» muestra cuánto le queda a cada cliente y avisa
+    si lo que le asignas hoy le hace pasarse.
 - **Comentarios**: los escritos al confirmar el día aparecen en el detalle del
   día de cada persona (el general arriba, el de cada cliente bajo su nombre) y
   en el detalle de cada cliente.
