@@ -113,6 +113,8 @@ npm run dev          # http://localhost:3030
 ```
 
 `create-user` muestra una contraseña temporal una sola vez; cámbiala al entrar.
+Si alguien la olvida, `npm run reset-password -- su@email.com` le genera otra
+temporal y cierra sus sesiones abiertas.
 Para parar la base de datos: `npm run db:down` (los datos se conservan).
 
 ### Qué hace ya

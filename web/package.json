@@ -12,6 +12,7 @@
     "db:down": "docker compose down",
     "migrate": "node --env-file-if-exists=.env src/db/migrate.ts",
     "create-user": "node --env-file-if-exists=.env src/scripts/create-user.ts",
+    "reset-password": "node --env-file-if-exists=.env src/scripts/reset-password.ts",
     "dev": "node --env-file-if-exists=.env --watch src/server.ts",
     "start": "node --env-file-if-exists=.env src/server.ts",
     "typecheck": "tsc"
