@@ -1,4 +1,4 @@
-import type { ActivityKind, Assignment } from '../core/types.ts';
+import type { ActivityKind, Assignment, DayNote } from '../core/types.ts';
 import type { ReviewStore } from '../storage/review-store.ts';
 
 const TIMEOUT_MS = 10_000;
@@ -56,8 +56,11 @@ export class WebClient {
     return this.request('GET', '/api/rules');
   }
 
-  /** Envía un día. Lo marcado como "Personal" se queda fuera. */
-  putDay(date: string, items: Assignment[]): Promise<unknown> {
+  /**
+   * Envía un día con sus comentarios. Lo marcado como "Personal" se queda fuera, y
+   * también los comentarios de clientes a los que al final no se asignó tiempo.
+   */
+  putDay(date: string, items: Assignment[], notes: DayNote[] = []): Promise<unknown> {
     const sent = items
       .filter((i) => i.bucket !== 'personal')
       .map((i) => ({
@@ -68,7 +71,9 @@ export class WebClient {
         clientId: i.bucket === 'client' ? i.clientId : null,
         remember: i.bucket === 'client' && i.remember,
       }));
-    return this.request('PUT', `/api/days/${date}`, { items: sent });
+    const clients = new Set(sent.filter((i) => i.clientId !== null).map((i) => i.clientId));
+    const sentNotes = notes.filter((n) => n.text.trim() && (n.clientId === null || clients.has(n.clientId)));
+    return this.request('PUT', `/api/days/${date}`, { items: sent, notes: sentNotes });
   }
 
   private async request<T>(method: string, path: string, body?: unknown, credentials?: Credentials): Promise<T> {

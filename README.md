@@ -121,9 +121,10 @@ Tiene tres páginas:
   en una fila. Si una web o un chat ya se asignó antes a un cliente, aparece
   preseleccionado (reglas compartidas por todo el equipo); la casilla
   **Recordar** decide si se guarda la regla (desmárcala en webs genéricas como
-  github.com). **Confirmar y enviar** manda el día a la web; si no hay conexión
-  se guarda y se reintenta cada 10 minutos. Se puede volver a confirmar un día
-  para corregirlo.
+  github.com). Debajo, **comentarios** opcionales: uno del día y uno por cada
+  cliente con tiempo asignado (qué hiciste para él). **Confirmar y enviar**
+  manda el día y sus comentarios a la web; si no hay conexión se guarda y se
+  reintenta cada 10 minutos. Se puede volver a confirmar un día para corregirlo.
 - **Ajustes**:
   - *Cuenta*: con quién está conectado (nombre y email), la web, y botones para
     abrirla, cambiar la conexión o desconectar. Para conectar, la dirección de la
@@ -192,7 +193,13 @@ Para parar la base de datos: `npm run db:down` (los datos se conservan).
   - *Por cliente y mes*: el total de cada cliente (y de Interno y Sin cliente)
     con el reparto por persona; al pulsar uno se ven sus actividades, personas y días.
   De momento todo el equipo ve los tiempos de todos.
-- **Clientes**: lista con buscador y alta (sin duplicados, aunque cambien mayúsculas).
+- **Clientes**: lista con buscador, alta (sin duplicados, aunque cambien
+  mayúsculas) y el tiempo total de cada uno. Al pulsar un cliente, su ficha:
+  total, este mes y personas; tiempo por mes (cada mes enlaza a su detalle en
+  Tiempos), por persona, sus webs, chats y apps, y los comentarios recientes.
+- **Comentarios**: los escritos al confirmar el día aparecen en el detalle del
+  día de cada persona (el general arriba, el de cada cliente bajo su nombre) y
+  en el detalle de cada cliente.
 - **Ajustes**: nombre, email, contraseña y el **agente del PC**: generar su
   código (se muestra una vez y generar otro invalida el anterior), ver cuándo
   contactó por última vez y desconectarlo.
@@ -201,8 +208,9 @@ Para parar la base de datos: `npm run db:down` (los datos se conservan).
   - `GET /api/clients` y `GET /api/rules` (qué cliente se preselecciona para
     cada dominio, chat o app; compartidas por todo el equipo).
   - `PUT /api/days/AAAA-MM-DD`: el día confirmado, actividad por actividad
-    (cliente, interno o sin cliente). Volver a enviarlo lo sustituye. Las
-    actividades marcadas para recordar actualizan las reglas.
+    (cliente, interno o sin cliente), con sus comentarios (`notes`). Volver a
+    enviarlo lo sustituye. Las actividades marcadas para recordar actualizan
+    las reglas.
 
 Lo marcado como **Personal** en la revisión nunca se envía.
 

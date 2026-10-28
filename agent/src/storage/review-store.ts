@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Assignment } from '../core/types.ts';
+import type { Assignment, DayNote } from '../core/types.ts';
 
 /** Día revisado por el usuario. Se guarda aquí antes de enviarlo, por si no hay conexión. */
 export interface ConfirmedDay {
@@ -7,6 +7,8 @@ export interface ConfirmedDay {
   confirmedAt: string;
   /** Todas las asignaciones, incluidas las de "Personal" (que no se envían). */
   items: Assignment[];
+  /** Comentarios del día: general y por cliente. */
+  notes: DayNote[];
   /** null mientras está pendiente de enviar a la web. */
   sentAt: string | null;
   lastError: string | null;
@@ -45,6 +47,11 @@ export class ReviewStore {
         last_error   TEXT
       );
     `);
+    // Bases de antes de los comentarios.
+    const columns = this.db.prepare('PRAGMA table_info(confirmed_days)').all();
+    if (!columns.some((c) => c.name === 'notes')) {
+      this.db.exec("ALTER TABLE confirmed_days ADD COLUMN notes TEXT NOT NULL DEFAULT '[]'");
+    }
   }
 
   getSetting(key: SettingKey): string | null {
@@ -63,15 +70,16 @@ export class ReviewStore {
   }
 
   /** Guarda la revisión de un día como pendiente de enviar (sustituye a la anterior). */
-  confirm(date: string, items: Assignment[]): void {
+  confirm(date: string, items: Assignment[], notes: DayNote[] = []): void {
     this.db
       .prepare(
-        `INSERT INTO confirmed_days (date, confirmed_at, items, sent_at, last_error)
-         VALUES (?, ?, ?, NULL, NULL)
+        `INSERT INTO confirmed_days (date, confirmed_at, items, notes, sent_at, last_error)
+         VALUES (?, ?, ?, ?, NULL, NULL)
          ON CONFLICT (date) DO UPDATE
-           SET confirmed_at = excluded.confirmed_at, items = excluded.items, sent_at = NULL, last_error = NULL`,
+           SET confirmed_at = excluded.confirmed_at, items = excluded.items, notes = excluded.notes,
+               sent_at = NULL, last_error = NULL`,
       )
-      .run(date, new Date().toISOString(), JSON.stringify(items));
+      .run(date, new Date().toISOString(), JSON.stringify(items), JSON.stringify(notes));
   }
 
   get(date: string): ConfirmedDay | null {
@@ -117,6 +125,7 @@ function toConfirmedDay(row: Record<string, unknown>): ConfirmedDay {
     date: String(row.date),
     confirmedAt: String(row.confirmed_at),
     items: JSON.parse(String(row.items)) as Assignment[],
+    notes: JSON.parse(String(row.notes ?? '[]')) as DayNote[],
     sentAt: row.sent_at === null ? null : String(row.sent_at),
     lastError: row.last_error === null ? null : String(row.last_error),
   };

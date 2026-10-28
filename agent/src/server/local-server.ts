@@ -6,7 +6,7 @@ import { dayRange, localDate } from '../core/day-range.ts';
 import { pendingDays } from '../core/pending-days.ts';
 import { MAX_REMINDER_HOURS, MIN_REMINDER_HOURS, reminderSettings } from '../core/reminders.ts';
 import { autostartStatus, setAutostart } from '../autostart.ts';
-import type { ActivityKind, Assignment, Bucket } from '../core/types.ts';
+import type { ActivityKind, Assignment, Bucket, DayNote } from '../core/types.ts';
 import type { BrowserReceiver } from '../sources/browser/browser-receiver.ts';
 import type { ReviewStore } from '../storage/review-store.ts';
 import type { SegmentStore } from '../storage/segment-store.ts';
@@ -33,6 +33,8 @@ const CURRENT_MAX_AGE_MS = config.pollIntervalSeconds * 3 * 1000;
 /** Límites del tiempo de inactividad configurable en Ajustes. */
 const MIN_IDLE_MINUTES = 1;
 const MAX_IDLE_MINUTES = 60;
+/** Igual que en la web: un comentario no puede pasar de aquí. */
+const MAX_NOTE_LENGTH = 2000;
 const KINDS: ActivityKind[] = ['domain', 'chat', 'app'];
 const BUCKETS: Bucket[] = ['client', 'internal', 'unassigned', 'personal'];
 
@@ -246,7 +248,7 @@ export class LocalServer {
     parseDay(date);
     if (!Array.isArray(body.items)) throw new RequestError(400, 'Faltan las actividades (items).');
     const items = body.items.map(parseAssignment);
-    this.deps.reviews.confirm(date, items);
+    this.deps.reviews.confirm(date, items, parseNotes(body.notes));
     await this.deps.sync.sendPending();
     return { confirmed: this.deps.reviews.get(date) };
   }
@@ -369,6 +371,24 @@ function parseWebUrl(value: unknown): string {
   } catch {
     throw new RequestError(400, 'La dirección de la web no es válida (p. ej. https://contador.tuempresa.com).');
   }
+}
+
+/** Comentarios del día (opcionales). Los vacíos se descartan. */
+function parseNotes(raw: unknown): DayNote[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new RequestError(400, 'notes debe ser una lista.');
+  return raw.flatMap((n, index) => {
+    const r = (n && typeof n === 'object' ? n : {}) as Record<string, unknown>;
+    const clientId = r.clientId ?? null;
+    if ((clientId !== null && typeof clientId !== 'number') || typeof r.text !== 'string') {
+      throw new RequestError(400, `El comentario ${index + 1} no es válido.`);
+    }
+    if (r.text.length > MAX_NOTE_LENGTH) {
+      throw new RequestError(400, `El comentario ${index + 1} supera los ${MAX_NOTE_LENGTH} caracteres.`);
+    }
+    const text = r.text.trim();
+    return text ? [{ clientId: clientId as number | null, text }] : [];
+  });
 }
 
 function parseAssignment(raw: unknown, index: number): Assignment {

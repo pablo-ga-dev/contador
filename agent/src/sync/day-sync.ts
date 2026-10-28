@@ -39,7 +39,7 @@ export class DaySync {
   private async sendAll(): Promise<void> {
     for (const day of this.store.unsent()) {
       try {
-        await this.web.putDay(day.date, day.items);
+        await this.web.putDay(day.date, day.items, day.notes);
         this.store.markSent(day);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
