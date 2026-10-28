@@ -22,6 +22,7 @@ const STATIC_FILES: Record<string, [string, string]> = {
   '/ajustes': ['settings.html', 'text/html; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/common.js': ['common.js', 'text/javascript; charset=utf-8'],
+  '/theme.js': ['theme.js', 'text/javascript; charset=utf-8'],
   '/logo.svg': ['logo.svg', 'image/svg+xml'],
   '/favicon.svg': ['favicon.svg', 'image/svg+xml'],
   // Las instala "npm run fuentes"; si faltan, el panel usa las del sistema.

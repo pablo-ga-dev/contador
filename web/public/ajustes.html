@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ajustes · DIALOGUE</title>
 <link rel="stylesheet" href="/app.css">
+<script src="/theme.js"></script>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
   main { max-width: 720px; }
@@ -56,6 +57,12 @@
       <button type="submit">Cambiar contraseña</button>
       <div class="msg" id="password-msg"></div>
     </form>
+  </section>
+
+  <section class="card">
+    <h2>Apariencia</h2>
+    <p>Automático usa el modo claro u oscuro del sistema. Se recuerda en este navegador.</p>
+    <div id="theme"></div>
   </section>
 </main>
 <script type="module">
@@ -146,6 +153,7 @@
     }
   });
 
+  mountThemePicker($('theme'));
   await startPage('/ajustes');
   showProfile(await api('GET', '/api/auth/profile'));
 </script>

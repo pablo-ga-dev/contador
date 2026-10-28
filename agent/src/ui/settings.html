@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ajustes · DIALOGUE</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/theme.js"></script>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
   main { max-width: 680px; display: flex; flex-direction: column; gap: 16px; }
@@ -142,6 +143,12 @@
       <button id="autostart-toggle" disabled>Activar</button>
       <span class="msg" id="autostart-msg"></span>
     </div>
+  </section>
+
+  <section class="card">
+    <h2>Apariencia</h2>
+    <p class="help">Automático usa el modo claro u oscuro del sistema.</p>
+    <div id="theme"></div>
   </section>
 
   <section class="card">
@@ -340,6 +347,7 @@
     }
   });
 
+  mountThemePicker($('theme'));
   render(await api('GET', '/api/settings'));
   api('GET', '/api/settings/autostart').then(renderAutostart, (err) => say('autostart-msg', err.message));
 </script>
