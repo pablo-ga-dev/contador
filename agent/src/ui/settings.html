@@ -136,7 +136,7 @@
   </section>
 
   <section class="card">
-    <h2>Arranque con Windows</h2>
+    <h2>Arranque automático</h2>
     <p class="help" id="autostart-state">Comprobando…</p>
     <div class="row">
       <button id="autostart-toggle" disabled>Activar</button>
@@ -209,11 +209,14 @@
     button.textContent = status.enabled ? 'Desactivar' : 'Activar';
     button.className = status.enabled ? 'danger' : 'primary';
     button.onclick = () => toggleAutostart(!status.enabled);
+    const system = status.platform === 'darwin' ? 'el Mac' : 'Windows';
     $('autostart-state').textContent = !status.enabled
-      ? 'Desactivado: tendrás que arrancar el agente a mano (npm run arrancar) cada vez que enciendas el PC.'
+      ? 'Desactivado: tendrás que arrancar el agente a mano (npm run arrancar) cada vez que enciendas el equipo.'
       : status.upToDate
-        ? 'Activado: el agente arranca solo y sin ventanas al iniciar sesión en Windows.'
-        : 'Activado, pero apunta a otra carpeta (¿has movido el proyecto?). Vuelve a activarlo para corregirlo.';
+        ? `Activado: el agente arranca solo y sin ventanas al iniciar sesión en ${system}.`
+        : status.platform === 'darwin'
+          ? 'Activado, pero apunta a otra carpeta o a otra versión de Node. Vuelve a activarlo para corregirlo.'
+          : 'Activado, pero apunta a otra carpeta (¿has movido el proyecto?). Vuelve a activarlo para corregirlo.';
     if (status.enabled && !status.upToDate) {
       button.textContent = 'Volver a activar';
       button.className = 'primary';

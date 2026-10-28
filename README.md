@@ -52,13 +52,16 @@ compartida por el equipo, en vuestro propio servidor.
   se lee el nombre del chat abierto con UI Automation, la API de los lectores de
   pantalla. Solo el nombre de la cabecera; nunca los mensajes.
 - **Tramos**: mientras sigas en la misma ventana, dominio y chat, se alarga el tramo
-  actual; al cambiar, empieza otro. Se guardan en
-  `%LOCALAPPDATA%\contador\contador.db`.
+  actual; al cambiar, empieza otro. Se guardan en la carpeta de datos (ver abajo).
 
 ## Requisitos
 
-- Windows 10/11
+- **Windows 10/11** o **macOS** (ver [En Mac](#en-mac))
 - [Node.js](https://nodejs.org) 22.18 o superior
+
+Carpeta de datos (`contador.db` y los registros del agente):
+- Windows: `%LOCALAPPDATA%\contador`
+- macOS: `~/Library/Application Support/DIALOGUE`
 
 ## Uso
 
@@ -70,11 +73,31 @@ npm run arrancar
 `npm run arrancar` lo deja funcionando **en segundo plano, sin ventanas**, y no
 depende de que la terminal siga abierta. Si ya estaba en marcha, no arranca otro
 (dos agentes contarían el tiempo dos veces). Para pararlo: `npm run parar`.
-Lo que escribe el agente se guarda en `%LOCALAPPDATA%\contador\agente.log` y
-`agente-error.log`. Para verlo en la propia terminal, usa `npm start`.
+Lo que escribe el agente se guarda en `agente.log` y `agente-error.log`, en la
+carpeta de datos. Para verlo en la propia terminal, usa `npm start`.
 
-Para que arranque solo al iniciar sesión en Windows, actívalo en
-**Ajustes → Arranque con Windows** (no necesita permisos de administrador).
+Para que arranque solo al iniciar sesión, actívalo en **Ajustes → Arranque
+automático** (no necesita permisos de administrador).
+
+### En Mac
+
+Funciona igual que en Windows, con estas diferencias:
+
+- **Permisos.** La primera vez macOS preguntará si permites que el agente
+  (Terminal, o `node` si arrancó solo) **controle «System Events»**: acéptalo.
+  Para que se vean los **títulos de ventana**, añádelo además en *Ajustes del
+  Sistema → Privacidad y seguridad → Accesibilidad*. Sin ese permiso se cuenta
+  igual por app y por web (con la extensión), pero sin títulos.
+- **Arranque automático**: crea `~/Library/LaunchAgents/com.dialogue.agent.plist`,
+  que macOS lanza al iniciar sesión. Usa el Node con el que se activó: si
+  actualizas Node, Ajustes avisará de que hay que volver a activarlo.
+- **Panel**: se abre en modo aplicación de Chrome, Edge o Brave si están en
+  `Aplicaciones`; si no, en el navegador por defecto.
+- **Aún no** se detecta el chat abierto en la app de WhatsApp (en Windows sí).
+
+> El soporte para Mac está escrito y revisado, pero **aún no se ha probado en un
+> Mac de verdad**. Si algo falla, el registro de errores está en
+> `~/Library/Application Support/DIALOGUE/agente-error.log`.
 
 ### Panel
 
@@ -111,7 +134,7 @@ Tiene tres páginas:
     la primera actividad del día si aún no lo has confirmado, y al encender el
     PC, abrir los días que quedaron sin confirmar. Cada aviso sale como mucho
     una vez al día y solo si estás delante del PC.
-  - *Arranque con Windows*: activarlo o desactivarlo. Avisa si el proyecto se
+  - *Arranque automático*: activarlo o desactivarlo. Avisa si el proyecto se
     ha movido de carpeta y hay que volver a activarlo.
   - *Datos en este PC*: dónde se guarda todo.
 
@@ -247,6 +270,8 @@ podría mostrarlo tal cual en su ventana.
 - Si ves un vídeo o estás en una videollamada sin tocar el teclado ni el ratón,
   tras 3 minutos se deja de contar.
 - Algunas apps de la Tienda de Windows aparecen como `ApplicationFrameHost`.
+- En Mac aún no se detecta el chat de WhatsApp, y sin el permiso de Accesibilidad
+  no hay títulos de ventana.
 - El chat de WhatsApp se lee de la estructura interna de la app (el elemento
   `main` y su primer texto). Si una actualización de WhatsApp la cambia, el
   tiempo se seguirá contando como WhatsApp, pero sin chat, hasta que lo ajustemos.

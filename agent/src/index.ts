@@ -6,15 +6,18 @@ import { Tracker } from './core/tracker.ts';
 import { openPanelWindow } from './open-window.ts';
 import { LocalServer } from './server/local-server.ts';
 import { BrowserReceiver } from './sources/browser/browser-receiver.ts';
-import { WindowsWindowSource } from './sources/windows/windows-window-source.ts';
+import { createWindowSource } from './sources/window-source.ts';
 import { openDatabase } from './storage/database.ts';
 import { ReviewStore } from './storage/review-store.ts';
 import { SegmentStore } from './storage/segment-store.ts';
 import { DaySync } from './sync/day-sync.ts';
 import { WebClient } from './sync/web-client.ts';
 
-if (process.platform !== 'win32') {
-  console.error('De momento el agente solo funciona en Windows.');
+let windows: ReturnType<typeof createWindowSource>;
+try {
+  windows = createWindowSource(config.pollIntervalSeconds);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 }
 
@@ -27,7 +30,6 @@ const web = new WebClient(reviews);
 const sync = new DaySync(reviews, web);
 const idleMinutes = () => Number(reviews.getSetting('idleMinutes') ?? config.idleThresholdSeconds / 60);
 const tracker = new Tracker(segments, browser, () => idleMinutes() * 60);
-const windows = new WindowsWindowSource(config.pollIntervalSeconds);
 const reminders = new Reminders({ segments, reviews, open: openPanelWindow });
 const server = new LocalServer({
   port: config.port, dbFile, segments, reviews, browser, web, sync, onShutdown: shutdown,

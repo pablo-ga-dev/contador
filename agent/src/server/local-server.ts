@@ -72,7 +72,7 @@ export interface LocalServerDeps {
  *   PUT  /api/settings/tracking minutos de inactividad tras los que se deja de contar
  *   POST /api/sync              envía ahora los días pendientes
  *   PUT  /api/settings/reminders  recordatorio diario y revisión de pendientes al encender
- *   GET|PUT /api/settings/autostart  arranque con Windows
+ *   GET|PUT /api/settings/autostart  arranque automático (Windows o macOS)
  *   POST /api/shutdown          para el agente (npm run parar)
  */
 export class LocalServer {
@@ -173,13 +173,13 @@ export class LocalServer {
       return sendJson(res, 200, this.saveReminders(await readJson(req)));
     }
     if (method === 'GET' && url.pathname === '/api/settings/autostart') {
-      return sendJson(res, 200, await autostartStatus());
+      return sendJson(res, 200, { ...(await autostartStatus()), platform: process.platform });
     }
     if (method === 'PUT' && url.pathname === '/api/settings/autostart') {
       const { enabled } = await readJson(req);
       if (typeof enabled !== 'boolean') throw new RequestError(400, 'Falta enabled (true o false).');
       await setAutostart(enabled);
-      return sendJson(res, 200, await autostartStatus());
+      return sendJson(res, 200, { ...(await autostartStatus()), platform: process.platform });
     }
     if (method === 'POST' && url.pathname === '/api/shutdown') {
       sendJson(res, 202, { stopping: true });
