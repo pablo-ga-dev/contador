@@ -6,12 +6,33 @@
 <title>Ajustes · Contador</title>
 <link rel="stylesheet" href="/style.css">
 <style>
-  main { max-width: 640px; }
+  main { max-width: 680px; display: flex; flex-direction: column; gap: 16px; }
   label { display: block; margin-bottom: 14px; color: var(--text-secondary); font-size: 13px; }
   label input { margin-top: 4px; }
   .help { margin: 0 0 16px; color: var(--text-secondary); }
-  .connected { margin-bottom: 16px; }
-  .row { display: flex; align-items: center; gap: 16px; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0 0 16px; }
+  .facts dt { color: var(--text-secondary); }
+  .facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .account { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 50%; flex: none;
+    display: grid; place-items: center; font-weight: 600;
+    background: var(--track); color: var(--text-secondary);
+  }
+  .account .name { font-size: 16px; font-weight: 600; }
+  .account .email { color: var(--text-secondary); }
+  input[type="number"] {
+    font: inherit; color: var(--text-primary); width: 80px; padding: 6px 8px;
+    background: var(--surface-0); border: 1px solid var(--border); border-radius: 6px;
+  }
+  button.danger { color: var(--danger); }
+  a.button {
+    display: inline-block; padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text-primary); text-decoration: none;
+  }
+  a.button:hover { background: var(--track); }
+  code.path { font: 13px/1.4 Consolas, "Cascadia Mono", monospace; }
 </style>
 </head>
 <body>
@@ -26,13 +47,29 @@
 
 <main>
   <section class="card">
-    <h2>Conexión con la web</h2>
-    <p class="help">
-      Para enviar los días revisados, entra en la web del equipo, pulsa «Generar código»
-      en «Conectar el agente» y pégalo aquí. El código se guarda solo en este PC.
-    </p>
-    <div class="connected msg" id="state"></div>
-    <form id="form">
+    <h2>Cuenta</h2>
+    <div id="connected" hidden>
+      <div class="account">
+        <div class="avatar" id="avatar" aria-hidden="true"></div>
+        <div>
+          <div class="name" id="user-name"></div>
+          <div class="email" id="user-email"></div>
+        </div>
+      </div>
+      <dl class="facts"><dt>Web</dt><dd id="web-url"></dd></dl>
+      <div class="row">
+        <a class="button" id="open-web" target="_blank" rel="noopener">Abrir la web</a>
+        <button id="change">Cambiar conexión</button>
+        <button class="danger" id="disconnect">Desconectar</button>
+      </div>
+      <div class="msg" id="account-msg"></div>
+    </div>
+
+    <form id="form" hidden>
+      <p class="help">
+        Para enviar los días revisados, entra en la web del equipo, ve a <strong>Ajustes</strong>,
+        pulsa «Generar código» y pégalo aquí. El código se guarda solo en este PC.
+      </p>
       <label>Dirección de la web
         <input type="url" name="webUrl" placeholder="https://contador.tuempresa.com" required>
       </label>
@@ -41,9 +78,46 @@
       </label>
       <div class="row">
         <button class="primary" type="submit">Guardar y probar</button>
+        <button type="button" id="cancel" hidden>Cancelar</button>
         <span class="msg" id="msg"></span>
       </div>
     </form>
+  </section>
+
+  <section class="card">
+    <h2>Envíos a la web</h2>
+    <dl class="facts" id="sync-facts"></dl>
+    <div class="row">
+      <button id="sync-now">Enviar ahora</button>
+      <a href="/revisar">Revisar días</a>
+      <span class="msg" id="sync-msg"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Seguimiento</h2>
+    <form id="tracking-form">
+      <p class="help">
+        Si no tocas el teclado ni el ratón durante este tiempo, se deja de contar
+        (y se descuenta ese rato). Súbelo si sueles ver vídeos o estar en videollamadas.
+      </p>
+      <div class="row">
+        <label style="margin: 0">Dejar de contar tras
+          <input type="number" name="idleMinutes" min="1" max="60" step="1" required> minutos
+        </label>
+        <button type="submit">Guardar</button>
+        <span class="msg" id="tracking-msg"></span>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Datos en este PC</h2>
+    <p class="help">
+      Todo lo que registra el agente se guarda solo aquí. A la web solo llega lo que
+      confirmas en «Revisar día», y nunca lo marcado como Personal.
+    </p>
+    <dl class="facts"><dt>Archivo</dt><dd><code class="path" id="data-file"></code></dd></dl>
   </section>
 </main>
 
@@ -52,33 +126,110 @@
 
   const $ = (id) => document.getElementById(id);
   const form = $('form');
+  let settings = null;
 
-  function show(settings) {
+  function say(id, text, kind = 'error') {
+    $(id).textContent = text;
+    $(id).className = `msg ${kind}`;
+  }
+  const when = (iso) => new Date(iso).toLocaleString('es-ES', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  const shortDate = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+
+  function render(s) {
+    settings = s;
+    const connected = Boolean(s.userName && s.hasAgentCode);
+    $('connected').hidden = !connected;
+    showForm(!connected);
+    if (connected) {
+      $('avatar').textContent = s.userName.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+      $('user-name').textContent = s.userName;
+      $('user-email').textContent = s.userEmail ?? '';
+      $('web-url').textContent = s.webUrl;
+      $('open-web').href = s.webUrl;
+    }
+
+    const facts = $('sync-facts');
+    facts.replaceChildren();
+    const add = (term, value) => {
+      const dt = document.createElement('dt');
+      dt.textContent = term;
+      const dd = document.createElement('dd');
+      dd.textContent = value;
+      facts.append(dt, dd);
+    };
+    add('Último envío', s.sync.lastSentAt ? when(s.sync.lastSentAt) : 'Todavía ninguno');
+    add('Pendientes', s.sync.unsent.length ? s.sync.unsent.map(shortDate).join(', ') : 'Ninguno');
+    if (s.sync.lastError) add('Motivo', s.sync.lastError);
+    $('sync-now').disabled = s.sync.unsent.length === 0;
+
+    $('tracking-form').idleMinutes.value = s.idleMinutes;
+    $('data-file').textContent = s.dataFile;
+  }
+
+  function showForm(visible) {
+    form.hidden = !visible;
+    if (!visible) return;
     form.webUrl.value = settings.webUrl ?? '';
     form.agentCode.value = '';
     form.agentCode.placeholder = settings.hasAgentCode ? 'Guardado (déjalo vacío para no cambiarlo)' : 'Pega aquí el código';
     form.agentCode.required = !settings.hasAgentCode;
-    const state = $('state');
-    state.className = settings.userName ? 'connected msg ok' : 'connected msg';
-    state.textContent = settings.userName ? `✓ Conectado como ${settings.userName}` : 'Todavía no está conectado.';
+    // "Cancelar" solo tiene sentido si ya había una conexión que conservar.
+    $('cancel').hidden = !(settings.userName && settings.hasAgentCode);
   }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const msg = $('msg');
-    msg.className = 'msg';
-    msg.textContent = 'Probando…';
+    say('msg', 'Probando…', '');
     try {
-      show(await api('PUT', '/api/settings', { webUrl: form.webUrl.value, agentCode: form.agentCode.value }));
-      msg.className = 'msg ok';
-      msg.textContent = 'Guardado. Los días pendientes se enviarán ahora.';
+      render(await api('PUT', '/api/settings', { webUrl: form.webUrl.value, agentCode: form.agentCode.value }));
+      say('account-msg', 'Conectado. Los días pendientes se enviarán ahora.', 'ok');
+      say('msg', '', '');
     } catch (err) {
-      msg.className = 'msg error';
-      msg.textContent = err.message;
+      say('msg', err.message);
     }
   });
 
-  show(await api('GET', '/api/settings'));
+  $('change').addEventListener('click', () => {
+    $('connected').hidden = true;
+    showForm(true);
+  });
+  $('cancel').addEventListener('click', () => render(settings));
+
+  $('disconnect').addEventListener('click', async () => {
+    if (!confirm('Este PC dejará de enviar días a la web hasta que vuelvas a pegar un código. Lo registrado no se borra. ¿Desconectar?')) return;
+    try {
+      render(await api('DELETE', '/api/settings/connection'));
+      say('msg', 'Desconectado. Lo registrado sigue guardado en este PC.', 'ok');
+    } catch (err) {
+      say('account-msg', err.message);
+    }
+  });
+
+  $('sync-now').addEventListener('click', async () => {
+    const button = $('sync-now');
+    button.disabled = true;
+    say('sync-msg', 'Enviando…', '');
+    try {
+      const s = await api('POST', '/api/sync');
+      render(s);
+      say('sync-msg', s.sync.unsent.length ? 'No se ha podido enviar todo.' : 'Todo enviado.', s.sync.unsent.length ? 'error' : 'ok');
+    } catch (err) {
+      say('sync-msg', err.message);
+      button.disabled = false;
+    }
+  });
+
+  $('tracking-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      render(await api('PUT', '/api/settings/tracking', { idleMinutes: Number(e.target.idleMinutes.value) }));
+      say('tracking-msg', 'Guardado.', 'ok');
+    } catch (err) {
+      say('tracking-msg', err.message);
+    }
+  });
+
+  render(await api('GET', '/api/settings'));
 </script>
 </body>
 </html>

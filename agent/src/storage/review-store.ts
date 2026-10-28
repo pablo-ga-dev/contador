@@ -12,7 +12,14 @@ export interface ConfirmedDay {
   lastError: string | null;
 }
 
-export type SettingKey = 'webUrl' | 'agentCode' | 'userName' | 'clientsCache' | 'rulesCache';
+export type SettingKey =
+  | 'webUrl'
+  | 'agentCode'
+  | 'userName'
+  | 'userEmail'
+  | 'clientsCache'
+  | 'rulesCache'
+  | 'idleMinutes';
 
 /** Ajustes del agente y días confirmados, en la misma base SQLite local. */
 export class ReviewStore {
@@ -78,6 +85,12 @@ export class ReviewStore {
       .prepare('SELECT * FROM confirmed_days WHERE sent_at IS NULL ORDER BY date')
       .all()
       .map(toConfirmedDay);
+  }
+
+  /** Cuándo se envió algo a la web por última vez, o null si nunca. */
+  lastSentAt(): string | null {
+    const row = this.db.prepare('SELECT MAX(sent_at) AS last FROM confirmed_days').get();
+    return row?.last ? String(row.last) : null;
   }
 
   /** Marca el día como enviado, salvo que se haya vuelto a confirmar mientras tanto. */

@@ -22,8 +22,9 @@ const reviews = new ReviewStore(db);
 const browser = new BrowserReceiver();
 const web = new WebClient(reviews);
 const sync = new DaySync(reviews, web);
-const server = new LocalServer({ port: config.port, segments, reviews, browser, web, sync });
-const tracker = new Tracker(segments, browser);
+const server = new LocalServer({ port: config.port, dbFile, segments, reviews, browser, web, sync });
+const idleMinutes = () => Number(reviews.getSetting('idleMinutes') ?? config.idleThresholdSeconds / 60);
+const tracker = new Tracker(segments, browser, () => idleMinutes() * 60);
 const windows = new WindowsWindowSource(config.pollIntervalSeconds);
 
 server.start();

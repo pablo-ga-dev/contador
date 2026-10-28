@@ -69,8 +69,14 @@ Tiene tres páginas:
   github.com). **Confirmar y enviar** manda el día a la web; si no hay conexión
   se guarda y se reintenta cada 10 minutos. Se puede volver a confirmar un día
   para corregirlo.
-- **Ajustes**: dirección de la web y código del agente (se genera en la web, en
-  «Conectar el agente»).
+- **Ajustes**:
+  - *Cuenta*: con quién está conectado (nombre y email), la web, y botones para
+    abrirla, cambiar la conexión o desconectar. Para conectar, la dirección de la
+    web y el código del agente (se genera en Ajustes de la web).
+  - *Envíos a la web*: último envío, días pendientes y su motivo, y «Enviar ahora».
+  - *Seguimiento*: minutos sin teclado ni ratón tras los que se deja de contar
+    (por defecto 3; súbelo si ves vídeos o estás en videollamadas).
+  - *Datos en este PC*: dónde se guarda todo.
 
 Lo marcado como **Personal** no sale nunca del PC.
 

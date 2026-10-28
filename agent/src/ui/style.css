@@ -49,6 +49,7 @@ body {
 }
 .num { font-variant-numeric: tabular-nums; }
 .muted { color: var(--text-muted); }
+a { color: var(--accent); }
 
 header {
   display: flex; align-items: center; gap: 20px; flex-wrap: wrap;

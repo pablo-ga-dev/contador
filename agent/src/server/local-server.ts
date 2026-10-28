@@ -24,6 +24,9 @@ const MAX_BODY_BYTES = 1024 * 1024;
 const CURRENT_MAX_AGE_MS = config.pollIntervalSeconds * 3 * 1000;
 /** Cuántos días hacia atrás se buscan días sin confirmar. */
 const PENDING_LOOKBACK_DAYS = 14;
+/** Límites del tiempo de inactividad configurable en Ajustes. */
+const MIN_IDLE_MINUTES = 1;
+const MAX_IDLE_MINUTES = 60;
 const KINDS: ActivityKind[] = ['domain', 'chat', 'app'];
 const BUCKETS: Bucket[] = ['client', 'internal', 'unassigned', 'personal'];
 
@@ -38,6 +41,8 @@ class RequestError extends Error {
 
 export interface LocalServerDeps {
   port: number;
+  /** Ruta de la base local, para mostrarla en Ajustes. */
+  dbFile: string;
   segments: SegmentStore;
   reviews: ReviewStore;
   browser: BrowserReceiver;
@@ -54,7 +59,10 @@ export interface LocalServerDeps {
  *   POST /api/review/:fecha     confirma un día y lo envía a la web
  *   GET  /api/catalog           clientes y reglas de la web (o la última copia si no hay conexión)
  *   POST /api/clients           crea un cliente en la web
- *   GET|PUT /api/settings       conexión con la web
+ *   GET|PUT /api/settings       ajustes: cuenta, envíos, seguimiento y datos locales; PUT conecta con la web
+ *   DELETE /api/settings/connection  desconecta el agente de la web
+ *   PUT  /api/settings/tracking minutos de inactividad tras los que se deja de contar
+ *   POST /api/sync              envía ahora los días pendientes
  */
 export class LocalServer {
   private server: http.Server | null = null;
@@ -124,6 +132,16 @@ export class LocalServer {
     if (method === 'GET' && url.pathname === '/api/settings') return sendJson(res, 200, this.settings());
     if (method === 'PUT' && url.pathname === '/api/settings') {
       return sendJson(res, 200, await this.saveSettings(await readJson(req)));
+    }
+    if (method === 'DELETE' && url.pathname === '/api/settings/connection') {
+      return sendJson(res, 200, this.disconnect());
+    }
+    if (method === 'PUT' && url.pathname === '/api/settings/tracking') {
+      return sendJson(res, 200, this.saveTracking(await readJson(req)));
+    }
+    if (method === 'POST' && url.pathname === '/api/sync') {
+      await this.deps.sync.sendPending();
+      return sendJson(res, 200, this.settings());
     }
     res.writeHead(404).end();
   }
@@ -232,13 +250,39 @@ export class LocalServer {
     }
   }
 
+  /** Todo lo que muestra la página de Ajustes. El código del agente nunca sale de aquí. */
   private settings() {
-    const { reviews } = this.deps;
+    const { reviews, dbFile } = this.deps;
+    const unsent = reviews.unsent();
     return {
       webUrl: reviews.getSetting('webUrl'),
       hasAgentCode: reviews.getSetting('agentCode') !== null,
       userName: reviews.getSetting('userName'),
+      userEmail: reviews.getSetting('userEmail'),
+      sync: {
+        lastSentAt: reviews.lastSentAt(),
+        unsent: unsent.map((d) => d.date),
+        lastError: unsent.find((d) => d.lastError)?.lastError ?? null,
+      },
+      idleMinutes: Number(reviews.getSetting('idleMinutes') ?? config.idleThresholdSeconds / 60),
+      dataFile: dbFile,
     };
+  }
+
+  /** Olvida el código y la cuenta; la dirección de la web se conserva para volver a conectar. */
+  private disconnect() {
+    const { reviews } = this.deps;
+    for (const key of ['agentCode', 'userName', 'userEmail'] as const) reviews.setSetting(key, null);
+    return this.settings();
+  }
+
+  private saveTracking(body: Record<string, unknown>) {
+    const minutes = Number(body.idleMinutes);
+    if (!Number.isInteger(minutes) || minutes < MIN_IDLE_MINUTES || minutes > MAX_IDLE_MINUTES) {
+      throw new RequestError(400, `Los minutos deben ser un número entero entre ${MIN_IDLE_MINUTES} y ${MAX_IDLE_MINUTES}.`);
+    }
+    this.deps.reviews.setSetting('idleMinutes', String(minutes));
+    return this.settings();
   }
 
   /** Comprueba la conexión con los datos nuevos antes de guardarlos. */
@@ -253,6 +297,7 @@ export class LocalServer {
       reviews.setSetting('webUrl', webUrl);
       reviews.setSetting('agentCode', agentCode);
       reviews.setSetting('userName', me.name);
+      reviews.setSetting('userEmail', me.email);
     } catch (err) {
       if (err instanceof WebError) throw new RequestError(400, err.message);
       throw err;
