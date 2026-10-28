@@ -23,6 +23,13 @@ const PAGES: Record<string, string> = {
 
 const app = new Hono<AppEnv>();
 
+// Páginas, estilos, scripts y fuentes: el navegador debe comprobar siempre si hay
+// una versión nueva. Si no, tras una actualización seguiría mostrando la anterior.
+app.use('*', async (c, next) => {
+  await next();
+  if (!c.req.path.startsWith('/api/')) c.header('Cache-Control', 'no-cache');
+});
+
 // Protección CSRF: una web ajena puede enviar formularios con la cookie del usuario,
 // pero no peticiones JSON (el navegador exige un permiso CORS que nunca damos).
 // Así que todo lo que modifica algo tiene que ser JSON. Funciona igual detrás de un proxy.
