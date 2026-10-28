@@ -19,7 +19,12 @@ export type SettingKey =
   | 'userEmail'
   | 'clientsCache'
   | 'rulesCache'
-  | 'idleMinutes';
+  | 'idleMinutes'
+  | 'reminderEnabled'
+  | 'reminderHours'
+  | 'startupReview'
+  | 'lastDailyReminder'
+  | 'lastStartupReview';
 
 /** Ajustes del agente y días confirmados, en la misma base SQLite local. */
 export class ReviewStore {

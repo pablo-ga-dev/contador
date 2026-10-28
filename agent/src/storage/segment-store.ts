@@ -96,6 +96,14 @@ export class SegmentStore {
     }));
   }
 
+  /** Inicio de la primera actividad entre `from` y `to`, o null si no hubo ninguna. */
+  firstStart(from: Date, to: Date): Date | null {
+    const row = this.db
+      .prepare('SELECT MIN(started_at) AS first FROM segments WHERE started_at >= ? AND started_at < ?')
+      .get(from.toISOString(), to.toISOString());
+    return row?.first ? new Date(String(row.first)) : null;
+  }
+
   /** Días (AAAA-MM-DD, hora local) con alguna actividad entre `from` y `to`. */
   activeDates(from: Date, to: Date): string[] {
     const rows = this.db
