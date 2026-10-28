@@ -55,6 +55,17 @@
   .pick.client .value { font-weight: 600; }
   .pick.personal .value, .pick.unassigned .value { color: var(--text-secondary); }
   .pick .caret { color: var(--text-muted); flex: none; }
+  .assign-row { display: flex; gap: 6px; align-items: center; }
+  .assign-row .pick { flex: 1; min-width: 0; }
+  button.icon { flex: none; padding: 5px 8px; font-size: 12px; color: var(--text-secondary); }
+  button.link { border: 0; padding: 5px 4px; color: var(--accent); font-size: 13px; }
+  tr.split td { border-bottom-style: dashed; }
+  tr.part td { padding-top: 3px; padding-bottom: 3px; background: var(--surface-0); }
+  tr.part td.part-name { padding-left: 46px; color: var(--text-secondary); font-size: 13px; }
+  input.part-time {
+    width: 76px; padding: 4px 8px; text-align: right; font: inherit; font-variant-numeric: tabular-nums;
+    color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px;
+  }
 
   #picker {
     position: absolute; z-index: 20; width: 320px;
@@ -164,13 +175,109 @@
 
   /** Lo ya confirmado ese día manda; si no, la regla del equipo; si no, "Sin cliente". */
   function initialChoice(activity) {
-    const saved = review.confirmed?.items.find((i) => i.kind === activity.kind && i.key === activity.key);
+    const savedAll = review.confirmed?.items.filter((i) => i.kind === activity.kind && i.key === activity.key) ?? [];
+    // Si se confirmó dividida, se recupera la división (la primera parte vuelve a quedarse con lo que sobra).
+    if (savedAll.length > 1) {
+      const parts = savedAll.map((i) => ({ bucket: i.bucket, clientId: i.clientId, seconds: i.seconds }));
+      fitParts(parts, activity.seconds);
+      return { bucket: parts[0].bucket, clientId: parts[0].clientId, remember: false, parts };
+    }
+    const saved = savedAll[0];
     if (saved) return { bucket: saved.bucket, clientId: saved.clientId, remember: saved.bucket !== 'client' || saved.remember };
     const rule = catalog.rules.find((r) => r.kind === activity.kind && r.key === activity.key);
     if (rule && catalog.clients.some((c) => c.id === rule.clientId)) {
       return { bucket: 'client', clientId: rule.clientId, remember: true };
     }
     return { bucket: 'unassigned', clientId: null, remember: true };
+  }
+
+  // --- Dividir una actividad entre varios clientes --------------------------
+  // Una fila dividida tiene `parts`. La primera parte se queda siempre con lo que sobra,
+  // así la suma cuadra siempre con el tiempo de la actividad.
+
+  /** Reparto de una fila: sin dividir, todo a su asignación; dividida, sus partes. */
+  function shares(row) {
+    if (!row.parts) return [{ bucket: row.bucket, clientId: row.clientId, seconds: row.seconds }];
+    const others = row.parts.slice(1).reduce((s, p) => s + p.seconds, 0);
+    return row.parts.map((p, i) => ({ bucket: p.bucket, clientId: p.clientId, seconds: i === 0 ? row.seconds - others : p.seconds }));
+  }
+
+  /** Recorta las partes (menos la primera) para que no sumen más que el total. */
+  function fitParts(parts, total) {
+    let left = total;
+    for (const p of parts.slice(1)) {
+      p.seconds = Math.max(0, Math.min(p.seconds, left));
+      left -= p.seconds;
+    }
+  }
+
+  /** Mitad de lo que sobra, redondeada a 5 min (o lo que haya si es poco). */
+  function halfOfRemainder(row) {
+    const left = shares(row)[0].seconds;
+    const half = Math.floor(left / 2 / 300) * 300;
+    return half >= 300 ? half : Math.floor(left / 60) * 60;
+  }
+
+  function splitRow(row) {
+    row.parts = [{ bucket: row.bucket, clientId: row.clientId, seconds: 0 }];
+    row.parts.push({ bucket: 'unassigned', clientId: null, seconds: halfOfRemainder(row) });
+    row.remember = false;
+    render();
+  }
+
+  function addPart(row) {
+    const seconds = halfOfRemainder(row);
+    if (seconds < 60) {
+      say('No queda tiempo para otra parte: baja primero el de alguna.');
+      return;
+    }
+    row.parts.push({ bucket: 'unassigned', clientId: null, seconds });
+    render();
+  }
+
+  function removePart(row, index) {
+    row.parts.splice(index, 1);
+    if (index === 0) row.parts[0].seconds = 0; // La nueva primera parte pasa a quedarse con lo que sobra.
+    if (row.parts.length === 1) unsplitRow(row);
+    else render();
+  }
+
+  function unsplitRow(row) {
+    row.bucket = row.parts[0].bucket;
+    row.clientId = row.parts[0].clientId;
+    row.remember = row.bucket === 'client';
+    delete row.parts;
+    render();
+  }
+
+  /** Acepta "1:30", "90", "90 min", "1h", "1h30", "1,5h". Devuelve minutos o null. */
+  function parseMinutes(text) {
+    const t = text.trim().toLowerCase().replace(',', '.');
+    let m;
+    if ((m = /^(\d+):(\d{1,2})$/.exec(t))) return Number(m[1]) * 60 + Number(m[2]);
+    if ((m = /^(\d+(?:\.\d+)?)\s*h(?:\s*(\d+)\s*(?:m|min)?)?$/.exec(t))) return Math.round(parseFloat(m[1]) * 60) + Number(m[2] ?? 0);
+    if ((m = /^(\d+)\s*(?:m|min)?$/.exec(t))) return Number(m[1]);
+    return null;
+  }
+  const hhmm = (seconds) => `${Math.floor(seconds / 3600)}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}`;
+
+  function setPartTime(row, index, text) {
+    const minutes = parseMinutes(text);
+    if (minutes === null) {
+      say('Escribe el tiempo como 1:30, 90 o 1h30.');
+      render();
+      return;
+    }
+    const others = row.parts.slice(1).reduce((s, p, i) => s + (i + 1 === index ? 0 : p.seconds), 0);
+    const max = row.seconds - others;
+    row.parts[index].seconds = Math.min(minutes * 60, max);
+    if (minutes * 60 > max) say(`Ajustado a ${formatDuration(max)}: es todo lo que queda de ${activityLabel(row)}.`);
+    render();
+  }
+
+  function say(text) {
+    $('msg').className = 'msg error';
+    $('msg').textContent = text;
   }
 
   function buildRows() {
@@ -200,8 +307,73 @@
     $('table').hidden = rows.length === 0;
     $('confirm').disabled = rows.length === 0;
     $('confirm').textContent = review.confirmed ? 'Volver a confirmar y enviar' : 'Confirmar y enviar';
-    rows.forEach((row) => body.append(renderRow(row)));
+    rows.forEach((row) => {
+      body.append(renderRow(row));
+      if (row.parts) shares(row).forEach((share, i) => body.append(renderPart(row, share, i)));
+    });
     renderComments();
+  }
+
+  /** Botón que abre el selector de cliente para una fila o una parte. */
+  function pickButton(target, choice, label) {
+    const pick = document.createElement('button');
+    pick.className = `pick ${choice.bucket}`;
+    const value = document.createElement('span');
+    value.className = 'value';
+    value.textContent = choiceLabel(choice);
+    const caret = document.createElement('span');
+    caret.className = 'caret';
+    caret.textContent = '▾';
+    pick.append(value, caret);
+    pick.setAttribute('aria-label', `Asignar ${label}: ${value.textContent}`);
+    pick.addEventListener('click', () => openPicker(target, pick));
+    return pick;
+  }
+
+  /** Fila de una parte de una actividad dividida. */
+  function renderPart(row, share, index) {
+    const tr = document.createElement('tr');
+    tr.className = 'part';
+    const label = `${activityLabel(row)}, parte ${index + 1}`;
+
+    const tdName = document.createElement('td');
+    tdName.className = 'part-name';
+    tdName.textContent = index === 0 ? '↳ Lo que sobra' : `↳ Parte ${index + 1}`;
+
+    const tdTime = document.createElement('td');
+    tdTime.className = 'time num';
+    if (index === 0) {
+      tdTime.textContent = formatDuration(share.seconds);
+      tdTime.title = 'Se ajusta solo con lo que asignes a las demás partes';
+    } else {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'part-time';
+      input.inputMode = 'numeric';
+      input.value = hhmm(share.seconds);
+      input.setAttribute('aria-label', `Tiempo de ${label} (h:mm)`);
+      input.title = 'Escribe 1:30, 90 o 1h30';
+      input.addEventListener('change', () => setPartTime(row, index, input.value));
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+      tdTime.append(input);
+    }
+
+    const tdAssign = document.createElement('td');
+    tdAssign.className = 'assign';
+    tdAssign.append(pickButton(row.parts[index], share, label));
+
+    const tdRemove = document.createElement('td');
+    tdRemove.className = 'remember';
+    const remove = document.createElement('button');
+    remove.className = 'icon';
+    remove.textContent = '✕';
+    remove.title = 'Quitar esta parte';
+    remove.setAttribute('aria-label', `Quitar ${label}`);
+    remove.addEventListener('click', () => removePart(row, index));
+    tdRemove.append(remove);
+
+    tr.append(tdName, tdTime, tdAssign, tdRemove);
+    return tr;
   }
 
   function renderRow(row) {
@@ -242,22 +414,35 @@
 
     const tdAssign = document.createElement('td');
     tdAssign.className = 'assign';
-    const pick = document.createElement('button');
-    pick.className = `pick ${row.bucket}`;
-    const value = document.createElement('span');
-    value.className = 'value';
-    value.textContent = choiceLabel(row);
-    const caret = document.createElement('span');
-    caret.className = 'caret';
-    caret.textContent = '▾';
-    pick.append(value, caret);
-    pick.setAttribute('aria-label', `Asignar ${name.textContent}: ${value.textContent}`);
-    pick.addEventListener('click', () => openPicker(row, pick));
-    tdAssign.append(pick);
+    const assign = document.createElement('div');
+    assign.className = 'assign-row';
+    if (row.parts) {
+      tr.className = 'split';
+      const add = document.createElement('button');
+      add.textContent = '+ Añadir parte';
+      add.addEventListener('click', () => addPart(row));
+      const undo = document.createElement('button');
+      undo.className = 'link';
+      undo.textContent = 'Quitar división';
+      undo.addEventListener('click', () => unsplitRow(row));
+      assign.append(add, undo);
+    } else {
+      assign.append(pickButton(row, row, name.textContent));
+      if (!row.members) {
+        const split = document.createElement('button');
+        split.className = 'icon';
+        split.textContent = 'Dividir';
+        split.title = 'Repartir este tiempo entre varios clientes';
+        split.setAttribute('aria-label', `Dividir ${name.textContent} entre varios clientes`);
+        split.addEventListener('click', () => splitRow(row));
+        assign.append(split);
+      }
+    }
+    tdAssign.append(assign);
 
     const tdRemember = document.createElement('td');
     tdRemember.className = 'remember';
-    if (!row.members) {
+    if (!row.members && !row.parts) {
       const box = document.createElement('input');
       box.type = 'checkbox';
       box.checked = row.bucket === 'client' && row.remember;
@@ -274,7 +459,8 @@
   }
 
   function renderTotals() {
-    const sum = (pred) => rows.filter(pred).reduce((s, r) => s + r.seconds, 0);
+    const all = rows.flatMap(shares);
+    const sum = (pred) => all.filter(pred).reduce((s, r) => s + r.seconds, 0);
     const parts = [
       ['Total', sum(() => true)],
       ['Clientes', sum((r) => r.bucket === 'client')],
@@ -484,7 +670,7 @@
     $('comments').hidden = rows.length === 0;
     const fields = $('comment-fields');
     fields.replaceChildren();
-    const clientIds = [...new Set(rows.filter((r) => r.bucket === 'client').map((r) => r.clientId))];
+    const clientIds = [...new Set(rows.flatMap(shares).filter((s) => s.bucket === 'client' && s.seconds > 0).map((s) => s.clientId))];
     clientIds.sort((a, b) => clientName(a).localeCompare(clientName(b), 'es'));
     fields.append(commentField('general', 'Del día', 'Resumen general del día'));
     for (const id of clientIds) fields.append(commentField(id, clientName(id), `Qué hiciste para ${clientName(id)}`));
@@ -512,7 +698,7 @@
 
   /** Lo que se envía: el comentario del día y los de los clientes que siguen con tiempo asignado. */
   function notesToSend() {
-    const clientIds = new Set(rows.filter((r) => r.bucket === 'client').map((r) => r.clientId));
+    const clientIds = new Set(rows.flatMap(shares).filter((s) => s.bucket === 'client' && s.seconds > 0).map((s) => s.clientId));
     return [...notes]
       .filter(([key, text]) => text.trim() && (key === 'general' || clientIds.has(key)))
       .map(([key, text]) => ({ clientId: key === 'general' ? null : key, text: text.trim() }));
@@ -539,9 +725,16 @@
   }
 
   $('confirm').addEventListener('click', async () => {
-    const items = rows.flatMap((r) => (r.members
-      ? r.members.map((m) => ({ ...m, bucket: r.bucket, clientId: r.clientId, remember: false }))
-      : [{ kind: r.kind, key: r.key, seconds: r.seconds, bucket: r.bucket, clientId: r.clientId, remember: r.bucket === 'client' && r.remember }]));
+    // Una actividad dividida se envía como varias partidas, una por parte (sin recordar regla).
+    const items = rows.flatMap((r) => {
+      if (r.members) return r.members.map((m) => ({ ...m, bucket: r.bucket, clientId: r.clientId, remember: false }));
+      if (r.parts) {
+        return shares(r)
+          .filter((s) => s.seconds > 0)
+          .map((s) => ({ kind: r.kind, key: r.key, seconds: s.seconds, bucket: s.bucket, clientId: s.clientId, remember: false }));
+      }
+      return [{ kind: r.kind, key: r.key, seconds: r.seconds, bucket: r.bucket, clientId: r.clientId, remember: r.bucket === 'client' && r.remember }];
+    });
     const button = $('confirm');
     button.disabled = true;
     $('msg').className = 'msg';

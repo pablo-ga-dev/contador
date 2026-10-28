@@ -121,7 +121,11 @@ Tiene tres páginas:
   en una fila. Si una web o un chat ya se asignó antes a un cliente, aparece
   preseleccionado (reglas compartidas por todo el equipo); la casilla
   **Recordar** decide si se guarda la regla (desmárcala en webs genéricas como
-  github.com). Debajo, **comentarios** opcionales: uno del día y uno por cada
+  github.com). **Dividir** reparte el tiempo de una actividad (p. ej. 2 h de
+  Claude o Figma) entre varios clientes: cada parte tiene su tiempo (`1:30`,
+  `90` o `1h30`) y su cliente, y la primera se queda con lo que sobra, así que
+  la suma siempre cuadra. Una actividad dividida no se guarda como regla.
+  Debajo, **comentarios** opcionales: uno del día y uno por cada
   cliente con tiempo asignado (qué hiciste para él). **Confirmar y enviar**
   manda el día y sus comentarios a la web; si no hay conexión se guarda y se
   reintenta cada 10 minutos. Se puede volver a confirmar un día para corregirlo.
