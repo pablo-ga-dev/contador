@@ -6,7 +6,15 @@ import { HttpError, jsonBody, text } from '../http.ts';
 const KINDS = ['domain', 'chat', 'app'] as const;
 const BUCKETS = ['client', 'internal', 'unassigned'] as const;
 const MAX_ITEMS = 2000;
+const MAX_NOTES = 100;
+const MAX_NOTE_LENGTH = 2000;
 const DAY_SECONDS = 24 * 3600;
+
+/** Comentario del día: general (clientId null) o de un cliente. */
+interface DayNote {
+  clientId: number | null;
+  text: string;
+}
 
 type Kind = (typeof KINDS)[number];
 type Bucket = (typeof BUCKETS)[number];
@@ -38,6 +46,7 @@ dayRoutes.put('/:date', async (c) => {
     throw new HttpError(400, `items debe ser una lista de como mucho ${MAX_ITEMS} actividades.`);
   }
   const items = body.items.map(parseItem);
+  const notes = parseNotes(body.notes);
   const user = c.get('user');
 
   try {
@@ -66,13 +75,41 @@ dayRoutes.put('/:date', async (c) => {
           ON CONFLICT (kind, key) DO UPDATE
             SET client_id = EXCLUDED.client_id, updated_by = EXCLUDED.updated_by, updated_at = now()`;
       }
+      await tx`DELETE FROM day_notes WHERE user_id = ${user.id} AND date = ${date}`;
+      if (notes.length > 0) {
+        const rows = notes.map((n) => ({ user_id: user.id, date, client_id: n.clientId, note: n.text }));
+        await tx`INSERT INTO day_notes ${tx(rows)}`;
+      }
     });
   } catch (err) {
     if ((err as { code?: string }).code === '23503') throw new HttpError(400, 'Algún cliente no existe.');
     throw err;
   }
-  return c.json({ date, items: items.length });
+  return c.json({ date, items: items.length, notes: notes.length });
 });
+
+/** Comentarios opcionales: vacíos se ignoran y, si se repite un cliente, vale el último. */
+function parseNotes(raw: unknown): DayNote[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.length > MAX_NOTES) {
+    throw new HttpError(400, `notes debe ser una lista de como mucho ${MAX_NOTES} comentarios.`);
+  }
+  const byClient = new Map<number | null, DayNote>();
+  raw.forEach((n, index) => {
+    const r = (n && typeof n === 'object' ? n : {}) as Record<string, unknown>;
+    const clientId = r.clientId ?? null;
+    if (clientId !== null && (typeof clientId !== 'number' || !Number.isInteger(clientId))) {
+      throw new HttpError(400, `El comentario ${index + 1}: clientId no válido.`);
+    }
+    if (typeof r.text !== 'string') throw new HttpError(400, `El comentario ${index + 1}: falta el texto.`);
+    const text = r.text.trim();
+    if (text.length > MAX_NOTE_LENGTH) {
+      throw new HttpError(400, `El comentario ${index + 1} supera los ${MAX_NOTE_LENGTH} caracteres.`);
+    }
+    if (text) byClient.set(clientId as number | null, { clientId: clientId as number | null, text });
+  });
+  return [...byClient.values()];
+}
 
 function parseItem(raw: unknown, index: number): DayItem {
   const where = `la actividad ${index + 1}`;

@@ -9,6 +9,10 @@ reportRoutes.use(requireUser);
 
 type Bucket = 'client' | 'internal' | 'unassigned';
 
+/** En el resumen de un cliente: cuántas actividades y comentarios recientes se muestran. */
+const TOP_ACTIVITIES = 20;
+const RECENT_NOTES = 30;
+
 interface Totals {
   client: number;
   internal: number;
@@ -54,7 +58,20 @@ reportRoutes.get('/day', async (c) => {
       FROM day_items i LEFT JOIN clients c ON c.id = i.client_id
      WHERE i.user_id = ${userId} AND i.date = ${date}
      ORDER BY i.seconds DESC`;
-  return c.json({ user, date, confirmedAt: day?.confirmed_at ?? null, groups: groupItems(items) });
+  const notes = await sql<{ client_id: number | null; note: string }[]>`
+    SELECT client_id, note FROM day_notes WHERE user_id = ${userId} AND date = ${date}`;
+  // Cada comentario de cliente va con su grupo; el general, aparte.
+  const groups = groupItems(items).map((g) => ({
+    ...g,
+    note: g.bucket === 'client' ? notes.find((n) => n.client_id === g.clientId)?.note ?? null : null,
+  }));
+  return c.json({
+    user,
+    date,
+    confirmedAt: day?.confirmed_at ?? null,
+    note: notes.find((n) => n.client_id === null)?.note ?? null,
+    groups,
+  });
 });
 
 /** Mes por cliente: total de cada cliente (y de interno / sin cliente), con el reparto por persona. */
@@ -114,7 +131,55 @@ reportRoutes.get('/month/detail', async (c) => {
           FROM day_items i WHERE ${where}
          GROUP BY i.date ORDER BY i.date`,
   ]);
-  return c.json({ month, clientId, name, activities, byUser, byDay });
+  const notes = clientId === null ? [] : await sql`
+    SELECT n.date::text AS date, u.name AS "userName", n.note
+      FROM day_notes n JOIN users u ON u.id = n.user_id
+     WHERE n.client_id = ${clientId} AND n.date >= ${from} AND n.date < ${to}
+     ORDER BY n.date DESC, u.name`;
+  return c.json({ month, clientId, name, activities, byUser, byDay, notes });
+});
+
+/** Tiempo total de cada cliente desde siempre, para la lista de Clientes. */
+reportRoutes.get('/clients', async (c) => {
+  const rows = await sql<{ id: number; seconds: number; last_date: string | null }[]>`
+    SELECT client_id AS id, SUM(seconds)::int AS seconds, MAX(date)::text AS last_date
+      FROM day_items WHERE client_id IS NOT NULL GROUP BY client_id`;
+  return c.json(rows.map((r) => ({ id: r.id, seconds: r.seconds, lastDate: r.last_date })));
+});
+
+/** Todo lo de un cliente: total, por mes, por persona, actividades y comentarios recientes. */
+reportRoutes.get('/clients/:id', async (c) => {
+  const clientId = parseId(c.req.param('id'), 'el cliente');
+  const [client] = await sql<{ id: number; name: string; created_at: Date }[]>`
+    SELECT id, name, created_at FROM clients WHERE id = ${clientId}`;
+  if (!client) throw new HttpError(404, 'Ese cliente no existe.');
+
+  const [byMonth, byUser, activities, notes] = await Promise.all([
+    sql`SELECT to_char(date, 'YYYY-MM') AS month, SUM(seconds)::int AS seconds
+          FROM day_items WHERE client_id = ${clientId}
+         GROUP BY 1 ORDER BY 1 DESC`,
+    sql`SELECT u.id AS "userId", u.name, SUM(i.seconds)::int AS seconds, MAX(i.date)::text AS "lastDate"
+          FROM day_items i JOIN users u ON u.id = i.user_id WHERE i.client_id = ${clientId}
+         GROUP BY u.id, u.name ORDER BY seconds DESC`,
+    sql`SELECT kind, key, SUM(seconds)::int AS seconds
+          FROM day_items WHERE client_id = ${clientId}
+         GROUP BY kind, key ORDER BY seconds DESC LIMIT ${TOP_ACTIVITIES}`,
+    sql`SELECT n.date::text AS date, u.name AS "userName", n.note
+          FROM day_notes n JOIN users u ON u.id = n.user_id
+         WHERE n.client_id = ${clientId}
+         ORDER BY n.date DESC, u.name LIMIT ${RECENT_NOTES}`,
+  ]);
+  const total = (byMonth as unknown as { seconds: number }[]).reduce((s, m) => s + m.seconds, 0);
+  return c.json({
+    id: client.id,
+    name: client.name,
+    createdAt: client.created_at,
+    totalSeconds: total,
+    byMonth,
+    byUser,
+    activities,
+    notes,
+  });
 });
 
 function groupItems(items: { bucket: Bucket; client_id: number | null; client_name: string | null; kind: string; key: string; seconds: number }[]) {

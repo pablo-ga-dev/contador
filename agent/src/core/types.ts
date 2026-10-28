@@ -50,6 +50,12 @@ export interface Assignment extends Activity {
   remember: boolean;
 }
 
+/** Comentario que se escribe al confirmar el día: general (clientId null) o de un cliente. */
+export interface DayNote {
+  clientId: number | null;
+  text: string;
+}
+
 /** Tramo continuo haciendo lo mismo, tal como se guarda en la base de datos. */
 export interface Segment {
   id?: number;

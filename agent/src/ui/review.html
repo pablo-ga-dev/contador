@@ -71,6 +71,19 @@
 
   .actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 16px; }
   .empty { color: var(--text-muted); padding: 24px 8px; text-align: center; }
+
+  .comments { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .comments h3 { margin: 0 0 2px; font-size: 15px; }
+  .comments .help { margin: 0 0 12px; color: var(--text-secondary); font-size: 13px; }
+  .comment { display: grid; grid-template-columns: 200px 1fr; gap: 12px; align-items: start; margin-bottom: 10px; }
+  .comment label { padding-top: 7px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .comment label.general { font-weight: 400; color: var(--text-secondary); }
+  .comment textarea {
+    font: inherit; color: var(--text-primary); width: 100%; min-height: 38px; resize: vertical;
+    padding: 7px 10px; background: var(--surface-0); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .comment textarea:focus-visible { outline: 2px solid var(--temporal-pulse); outline-offset: 1px; }
+  @media (max-width: 700px) { .comment { grid-template-columns: 1fr; gap: 4px; } }
 </style>
 </head>
 <body>
@@ -107,6 +120,11 @@
       <tbody id="rows"></tbody>
     </table>
     <div class="empty" id="empty" hidden>No hay actividad registrada este día.</div>
+    <div class="comments" id="comments" hidden>
+      <h3>Comentarios</h3>
+      <p class="help">Opcional. Qué hiciste en el día o para cada cliente; se verá en la web junto a los tiempos.</p>
+      <div id="comment-fields"></div>
+    </div>
     <div class="actions">
       <span class="msg" id="msg"></span>
       <button class="primary" id="confirm">Confirmar y enviar</button>
@@ -183,6 +201,7 @@
     $('confirm').disabled = rows.length === 0;
     $('confirm').textContent = review.confirmed ? 'Volver a confirmar y enviar' : 'Confirmar y enviar';
     rows.forEach((row) => body.append(renderRow(row)));
+    renderComments();
   }
 
   function renderRow(row) {
@@ -454,6 +473,51 @@
     warning.hidden = warning.childNodes.length === 0;
   }
 
+  // --- Comentarios ----------------------------------------------------------
+
+  /** Texto de cada comentario: clave "general" o el id del cliente. Se conserva al cambiar asignaciones. */
+  let notes = new Map();
+  const MAX_NOTE_LENGTH = 2000;
+
+  /** Un campo para el día y otro por cada cliente que tiene tiempo asignado ahora mismo. */
+  function renderComments() {
+    $('comments').hidden = rows.length === 0;
+    const fields = $('comment-fields');
+    fields.replaceChildren();
+    const clientIds = [...new Set(rows.filter((r) => r.bucket === 'client').map((r) => r.clientId))];
+    clientIds.sort((a, b) => clientName(a).localeCompare(clientName(b), 'es'));
+    fields.append(commentField('general', 'Del día', 'Resumen general del día'));
+    for (const id of clientIds) fields.append(commentField(id, clientName(id), `Qué hiciste para ${clientName(id)}`));
+  }
+
+  function commentField(key, label, placeholder) {
+    const wrap = document.createElement('div');
+    wrap.className = 'comment';
+    const id = `note-${key}`;
+    const labelEl = document.createElement('label');
+    labelEl.htmlFor = id;
+    labelEl.textContent = label;
+    labelEl.title = label;
+    if (key === 'general') labelEl.className = 'general';
+    const textarea = document.createElement('textarea');
+    textarea.id = id;
+    textarea.rows = 1;
+    textarea.maxLength = MAX_NOTE_LENGTH;
+    textarea.placeholder = placeholder;
+    textarea.value = notes.get(key) ?? '';
+    textarea.addEventListener('input', () => notes.set(key, textarea.value));
+    wrap.append(labelEl, textarea);
+    return wrap;
+  }
+
+  /** Lo que se envía: el comentario del día y los de los clientes que siguen con tiempo asignado. */
+  function notesToSend() {
+    const clientIds = new Set(rows.filter((r) => r.bucket === 'client').map((r) => r.clientId));
+    return [...notes]
+      .filter(([key, text]) => text.trim() && (key === 'general' || clientIds.has(key)))
+      .map(([key, text]) => ({ clientId: key === 'general' ? null : key, text: text.trim() }));
+  }
+
   async function selectDay(iso) {
     selected = iso;
     history.replaceState(null, '', `/revisar?date=${iso}`);
@@ -465,6 +529,7 @@
       const data = await api('GET', `/api/review?date=${iso}`);
       if (iso !== selected) return;
       review = data;
+      notes = new Map((data.confirmed?.notes ?? []).map((n) => [n.clientId ?? 'general', n.text]));
       buildRows();
       render();
     } catch (err) {
@@ -483,7 +548,7 @@
     $('msg').textContent = 'Enviando…';
     try {
       const date = selected;
-      const { confirmed } = await api('POST', `/api/review/${date}`, { items });
+      const { confirmed } = await api('POST', `/api/review/${date}`, { items, notes: notesToSend() });
       $('msg').className = confirmed.sentAt ? 'msg ok' : 'msg error';
       $('msg').textContent = confirmed.sentAt ? 'Día confirmado y enviado.' : 'Guardado, pero aún no se ha podido enviar.';
       const fresh = await api('GET', `/api/review?date=${date}`);

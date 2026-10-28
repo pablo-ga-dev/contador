@@ -50,6 +50,15 @@
   .group { margin-bottom: 14px; }
   .group-title { display: flex; justify-content: space-between; font-weight: 600; padding: 4px 0; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
   .group-title.bucket { font-weight: 400; color: var(--text-secondary); }
+  .note {
+    margin: 6px 0 8px; padding: 8px 12px; border-left: 3px solid var(--pulse);
+    background: var(--surface-0); border-radius: 0 6px 6px 0;
+    white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-secondary);
+  }
+  .note.general { margin: 0 0 14px; }
+  .notes-list { margin-top: 20px; }
+  .notes-list h4 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; }
+  .notes-list .meta { color: var(--text-muted); font-size: 12px; margin-top: 10px; }
   .group .lines { padding-left: 4px; }
 
   @media (max-width: 800px) {
@@ -194,12 +203,15 @@
     const total = data.groups.reduce((s, g) => s + g.seconds, 0);
     head.append(el('span', 'muted num', `Total ${formatDuration(total)}`));
     detail.append(head);
+    if (data.note) detail.append(el('div', 'note general', data.note));
     if (data.groups.length === 0) detail.append(el('p', 'empty', 'Día confirmado sin tiempo asignado.'));
     for (const g of data.groups) {
       const group = el('div', 'group');
       const title = el('div', g.bucket === 'client' ? 'group-title' : 'group-title bucket');
       title.append(el('span', '', groupLabel(g)), el('span', 'num', formatDuration(g.seconds)));
-      group.append(title, activityList(g.items));
+      group.append(title);
+      if (g.note) group.append(el('div', 'note', g.note));
+      group.append(activityList(g.items));
       detail.append(group);
     }
     detail.hidden = false;
@@ -257,6 +269,17 @@
     days.append(el('h4', '', 'Por día'), simpleList(data.byDay.map((d) => [capitalize(fmtDate(d.date, { weekday: 'short', day: 'numeric' })), d.seconds])));
     cols.append(activities, people, days);
     detail.append(head, cols);
+    if (data.notes?.length) {
+      const notes = el('div', 'notes-list');
+      notes.append(el('h4', '', 'Comentarios'));
+      for (const n of data.notes) {
+        notes.append(
+          el('div', 'meta', `${capitalize(fmtDate(n.date, { weekday: 'short', day: 'numeric', month: 'short' }))} · ${n.userName}`),
+          el('div', 'note', n.note),
+        );
+      }
+      detail.append(notes);
+    }
     detail.hidden = false;
     detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }

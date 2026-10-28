@@ -7,14 +7,53 @@
 <link rel="stylesheet" href="/app.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
-  main { max-width: 720px; }
-  .clients { list-style: none; margin: 12px 0 0; padding: 0; }
-  .clients li { padding: 8px 4px; border-top: 1px solid var(--border); }
-  .clients li:first-child { border-top: 0; }
+  .layout { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 16px; align-items: start; }
+  .clients { list-style: none; margin: 12px 0 0; padding: 0; max-height: 70vh; overflow: auto; }
+  .clients button {
+    width: 100%; display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+    text-align: left; border: 0; border-radius: 6px; padding: 9px 8px;
+  }
+  .clients li + li button { border-top: 1px solid var(--border); border-radius: 0; }
+  .clients button[aria-current="true"] { background: var(--hover); box-shadow: inset 3px 0 0 var(--pulse); }
+  .clients .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .clients .time { color: var(--text-secondary); white-space: nowrap; font-size: 13px; }
+
+  .detail h3 { margin: 0; font-size: 20px; }
+  .detail .since { margin: 2px 0 16px; color: var(--text-muted); font-size: 13px; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .kpi { background: var(--surface-0); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .kpi .label { color: var(--text-secondary); font-size: 12px; }
+  .kpi .value { font: 600 22px/1.2 var(--font-title); }
+  .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 24px; }
+  .sections h4 {
+    margin: 0 0 8px; font-size: 12px; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: .08em;
+  }
+  .lines { list-style: none; margin: 0; padding: 0; }
+  .lines li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .lines .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lines .value { color: var(--text-secondary); white-space: nowrap; }
+  .months li { display: grid; grid-template-columns: 120px 1fr 90px; gap: 10px; }
+  .months a { color: var(--text-primary); text-decoration: none; }
+  .months a:hover { color: var(--accent); text-decoration: underline; }
+  .months .value { text-align: right; }
+  .track { height: 8px; background: var(--track); border-radius: 4px; overflow: hidden; }
+  .bar { height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .notes { grid-column: 1 / -1; }
+  .notes li { display: block; padding: 8px 0; border-top: 1px solid var(--border); }
+  .notes li:first-child { border-top: 0; }
+  .notes .meta { color: var(--text-muted); font-size: 12px; }
+  .notes .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .placeholder { color: var(--text-muted); text-align: center; padding: 48px 16px; }
+
+  @media (max-width: 860px) {
+    .layout, .sections { grid-template-columns: 1fr; }
+    .kpis { grid-template-columns: 1fr 1fr; }
+  }
 </style>
 </head>
 <body>
-<main>
+<main class="layout">
   <section class="card">
     <h2>Clientes</h2>
     <form class="row" id="form">
@@ -24,32 +63,158 @@
     <div class="msg" id="msg"></div>
     <ul class="clients" id="clients"></ul>
   </section>
+
+  <section class="card detail" id="detail">
+    <p class="placeholder">Elige un cliente para ver el tiempo que se le ha dedicado.</p>
+  </section>
 </main>
 <script type="module">
-  import { api, say, startPage } from '/app.js';
+  import {
+    KIND_LABELS, activityLabel, api, capitalize, el, fmtDate, formatDuration, monthLabel, say, startPage, todayISO,
+  } from '/app.js';
 
-  const form = document.getElementById('form');
+  const $ = (id) => document.getElementById(id);
+  const form = $('form');
   let clients = [];
+  let totals = new Map();
+  let selected = Number(new URLSearchParams(location.search).get('id')) || null;
 
-  function render() {
+  function renderList() {
     const query = form.client.value.trim().toLowerCase();
     const shown = clients.filter((c) => c.name.toLowerCase().includes(query));
-    const list = document.getElementById('clients');
+    const list = $('clients');
     list.replaceChildren();
     if (shown.length === 0) {
-      const li = document.createElement('li');
-      li.className = 'muted';
-      li.textContent = clients.length === 0 ? 'Todavía no hay clientes.' : 'Ningún cliente coincide. Pulsa «Nuevo» para crearlo.';
-      list.append(li);
+      list.append(el('li', 'muted', clients.length === 0
+        ? 'Todavía no hay clientes.'
+        : 'Ningún cliente coincide. Pulsa «Nuevo» para crearlo.'));
     }
     for (const c of shown) {
-      const li = document.createElement('li');
-      li.textContent = c.name;
+      const li = el('li');
+      const button = el('button');
+      button.setAttribute('aria-current', String(c.id === selected));
+      const t = totals.get(c.id);
+      button.append(el('span', 'name', c.name), el('span', 'time num', t ? formatDuration(t.seconds) : 'sin tiempo'));
+      button.addEventListener('click', () => select(c.id));
+      li.append(button);
       list.append(li);
     }
   }
 
-  form.client.addEventListener('input', render);
+  async function select(id) {
+    selected = id;
+    history.replaceState(null, '', `/clientes?id=${id}`);
+    renderList();
+    const detail = $('detail');
+    try {
+      const data = await api('GET', `/api/reports/clients/${id}`);
+      if (id !== selected) return;
+      renderDetail(data);
+    } catch (err) {
+      detail.replaceChildren(el('p', 'msg error', err.message));
+    }
+  }
+
+  function renderDetail(d) {
+    const detail = $('detail');
+    detail.replaceChildren();
+    detail.append(
+      el('h3', '', d.name),
+      el('p', 'since', `Cliente desde el ${new Date(d.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`),
+    );
+
+    const thisMonth = d.byMonth.find((m) => m.month === todayISO().slice(0, 7))?.seconds ?? 0;
+    const kpis = el('div', 'kpis');
+    for (const [label, value] of [
+      ['Total', formatDuration(d.totalSeconds)],
+      ['Este mes', formatDuration(thisMonth)],
+      ['Personas', String(d.byUser.length)],
+    ]) {
+      const kpi = el('div', 'kpi');
+      kpi.append(el('div', 'label', label), el('div', 'value num', value));
+      kpis.append(kpi);
+    }
+    detail.append(kpis);
+
+    if (d.totalSeconds === 0) {
+      detail.append(el('p', 'muted', 'Todavía nadie ha confirmado tiempo para este cliente.'));
+      return;
+    }
+
+    const sections = el('div', 'sections');
+
+    // Por mes: cada mes lleva a su detalle en Tiempos.
+    const months = section('Por mes');
+    const monthList = el('ul', 'lines months');
+    const max = Math.max(...d.byMonth.map((m) => m.seconds));
+    for (const m of d.byMonth) {
+      const li = el('li');
+      const link = el('a', 'label', monthLabel(m.month));
+      link.href = `/?vista=cliente&mes=${m.month}`;
+      link.title = 'Ver el detalle del mes en Tiempos';
+      const track = el('div', 'track');
+      const bar = el('div', 'bar');
+      bar.style.width = `${(m.seconds / max) * 100}%`;
+      track.append(bar);
+      li.append(link, track, el('span', 'value num', formatDuration(m.seconds)));
+      monthList.append(li);
+    }
+    months.append(monthList);
+
+    const people = section('Por persona');
+    people.append(lines(d.byUser.map((u) => [u.name, u.seconds,
+      `Última vez: ${capitalize(fmtDate(u.lastDate, { weekday: 'short', day: 'numeric', month: 'short' }))}`])));
+
+    const activities = section('Webs, chats y apps');
+    const ul = el('ul', 'lines');
+    for (const a of d.activities) {
+      const li = el('li');
+      const label = el('span', 'label', activityLabel(a));
+      label.title = activityLabel(a);
+      li.append(el('span', 'kind', KIND_LABELS[a.kind] ?? a.kind), label, el('span', 'value num', formatDuration(a.seconds)));
+      ul.append(li);
+    }
+    activities.append(ul);
+
+    const notes = section('Comentarios');
+    notes.classList.add('notes');
+    if (d.notes.length === 0) {
+      notes.append(el('p', 'muted', 'Sin comentarios. Se escriben al confirmar el día en el agente.'));
+    } else {
+      const list = el('ul', 'lines');
+      for (const n of d.notes) {
+        const li = el('li');
+        li.append(
+          el('div', 'meta', `${capitalize(fmtDate(n.date, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }))} · ${n.userName}`),
+          el('div', 'text', n.note),
+        );
+        list.append(li);
+      }
+      notes.append(list);
+    }
+
+    sections.append(months, people, activities, notes);
+    detail.append(sections);
+  }
+
+  function section(title) {
+    const div = el('div');
+    div.append(el('h4', '', title));
+    return div;
+  }
+
+  function lines(rows) {
+    const ul = el('ul', 'lines');
+    for (const [label, seconds, title] of rows) {
+      const li = el('li');
+      if (title) li.title = title;
+      li.append(el('span', 'label', label), el('span', 'value num', formatDuration(seconds)));
+      ul.append(li);
+    }
+    return ul;
+  }
+
+  form.client.addEventListener('input', renderList);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
@@ -57,16 +222,19 @@
       if (!clients.some((c) => c.id === created.id)) clients.push(created);
       clients.sort((a, b) => a.name.localeCompare(b.name, 'es'));
       form.client.value = '';
-      render();
       say('msg', `Cliente «${created.name}» listo.`, 'ok');
+      select(created.id);
     } catch (err) {
       say('msg', err.message);
     }
   });
 
   await startPage('/clientes');
-  clients = await api('GET', '/api/clients');
-  render();
+  const [list, sums] = await Promise.all([api('GET', '/api/clients'), api('GET', '/api/reports/clients')]);
+  clients = list;
+  totals = new Map(sums.map((t) => [t.id, t]));
+  renderList();
+  if (selected && clients.some((c) => c.id === selected)) select(selected);
 </script>
 </body>
 </html>
