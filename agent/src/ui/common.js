@@ -6,7 +6,7 @@ const APP_NAMES = {
   'WhatsApp.Root': 'WhatsApp', 'WhatsApp': 'WhatsApp', 'explorer': 'Explorador de archivos',
   'WINWORD': 'Word', 'EXCEL': 'Excel', 'POWERPNT': 'PowerPoint', 'OUTLOOK': 'Outlook',
   'olk': 'Outlook', 'ms-teams': 'Teams', 'Teams': 'Teams', 'Figma': 'Figma', 'Slack': 'Slack',
-  'Claude': 'Claude', 'WindowsTerminal': 'Terminal', 'powershell': 'PowerShell', 'pwsh': 'PowerShell',
+  'Claude': 'Claude', 'claude': 'Claude', 'WindowsTerminal': 'Terminal', 'powershell': 'PowerShell', 'pwsh': 'PowerShell',
 };
 export const appName = (app) => APP_NAMES[app] ?? app;
 

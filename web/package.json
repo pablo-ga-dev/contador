@@ -2,7 +2,7 @@
   "name": "contador-web",
   "version": "0.1.0",
   "private": true,
-  "description": "Web compartida de Contador: usuarios, clientes y tiempos confirmados.",
+  "description": "Web compartida de DIALOGUE: usuarios, clientes y tiempos confirmados.",
   "type": "module",
   "engines": {
     "node": ">=22.18"

@@ -1,12 +1,34 @@
-# Contador
+# DIALOGUE
 
-Contabiliza automáticamente el tiempo que dedicas a cada proyecto, sin tener que
-apuntar nada a mano.
+<img src="web/public/favicon.svg" alt="" width="64">
 
-> **Estado.** El agente registra qué aplicación, qué dominio y qué chat de
-> WhatsApp usas, y durante cuánto tiempo, lo muestra en un panel local y te deja
-> revisar cada día (qué tiempo es de qué cliente) y enviarlo a la web compartida.
-> Faltan los informes de la web, los recordatorios y el despliegue.
+Contabiliza automáticamente el tiempo que dedicas a cada cliente, sin tener que
+apuntar nada a mano: un agente en cada PC, revisión al final del día y una web
+compartida por el equipo, en vuestro propio servidor.
+
+> **Estado.** El agente registra qué aplicación, qué web y qué chat de WhatsApp
+> usas, te recuerda revisar el día y lo envía a la web, donde se ven los tiempos
+> por persona y por cliente. Falta el despliegue en el servidor.
+
+## Identidad
+
+- **Nombre:** DIALOGUE (de *dia-*, «a través de», y del *dial* de un cronógrafo).
+- **Paleta:** Deep Steel `#0B132B` (fondos y cabeceras), Cobalt Plate `#1C3D5A`,
+  Temporal Pulse `#00D2FF` (estados activos y seguimiento en marcha), Platinum
+  Frame `#E2E8F0` (bordes) y Pure Clean `#F8FAFC` (fondo claro).
+- **Tipografías:** Technor Semibold para títulos y Supreme Regular para textos,
+  de [Fontshare](https://www.fontshare.com). Su licencia permite usarlas en
+  nuestra web y nuestra app, pero no publicarlas, así que **no están en el
+  repositorio**. En cada máquina (y en el servidor) se instalan desde el zip
+  descargado de Fontshare:
+
+  ```bash
+  npm run fuentes -- C:\ruta\FontshareKit-XXXX.zip
+  ```
+
+  Sin ellas, la web y el panel usan las fuentes del sistema.
+- **Logo:** `web/public/logo.svg` (sobre fondo oscuro) y `web/public/favicon.svg`
+  (con su fondo, para pestañas e iconos).
 
 ## Cómo funciona
 

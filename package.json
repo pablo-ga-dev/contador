@@ -13,6 +13,7 @@
     "panel": "node agent/src/open-panel.ts",
     "arrancar": "powershell -NoProfile -ExecutionPolicy Bypass -File agent/scripts/start-hidden.ps1",
     "parar": "node agent/src/stop.ts",
+    "fuentes": "node scripts/fuentes.ts",
     "typecheck": "tsc"
   },
   "devDependencies": {

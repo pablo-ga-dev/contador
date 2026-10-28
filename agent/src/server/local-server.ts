@@ -21,6 +21,11 @@ const STATIC_FILES: Record<string, [string, string]> = {
   '/ajustes': ['settings.html', 'text/html; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/common.js': ['common.js', 'text/javascript; charset=utf-8'],
+  '/logo.svg': ['logo.svg', 'image/svg+xml'],
+  '/favicon.svg': ['favicon.svg', 'image/svg+xml'],
+  // Las instala "npm run fuentes"; si faltan, el panel usa las del sistema.
+  '/fonts/Technor-Semibold.woff2': ['fonts/Technor-Semibold.woff2', 'font/woff2'],
+  '/fonts/Supreme-Regular.woff2': ['fonts/Supreme-Regular.woff2', 'font/woff2'],
 };
 const MAX_BODY_BYTES = 1024 * 1024;
 /** Un tramo cuyo final es más reciente que esto se considera "lo que estás haciendo ahora". */
@@ -125,8 +130,15 @@ export class LocalServer {
 
     if (method === 'GET' && STATIC_FILES[url.pathname]) {
       const [file, type] = STATIC_FILES[url.pathname]!;
+      let content: Buffer;
+      try {
+        content = await readFile(fileURLToPath(new URL(file, UI_DIR)));
+      } catch {
+        res.writeHead(404).end(); // p. ej. fuentes sin instalar
+        return;
+      }
       res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
-      res.end(await readFile(fileURLToPath(new URL(file, UI_DIR))));
+      res.end(content);
       return;
     }
     if (method === 'GET' && url.pathname === '/api/summary') {

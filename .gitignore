@@ -1,5 +1,8 @@
 node_modules/
 .env
+# Fuentes de Fontshare: su licencia no permite publicarlas (ver scripts/fuentes.ts).
+agent/src/ui/fonts/
+web/public/fonts/
 *.db
 *.db-shm
 *.db-wal

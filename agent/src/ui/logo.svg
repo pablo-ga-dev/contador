@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 560" role="img" aria-label="DIALOGUE">
+  <!-- Coraza octogonal, esfera con una abertura a la derecha, manecillas y nodo de seguimiento activo. -->
+  <g fill="none" stroke-linecap="butt">
+    <path d="M166 8H394L552 166V394L394 552H166L8 394V166Z" stroke="#E2E8F0" stroke-width="13" stroke-linejoin="miter"/>
+    <path d="M492 234A216 216 0 1 0 492 326" stroke="#E2E8F0" stroke-width="13"/>
+    <path d="M157 159L325 325M280 219V461M220 280H280" stroke="#2B4A72" stroke-width="10"/>
+    <path d="M280 280H497" stroke="#00D2FF" stroke-width="10"/>
+  </g>
+  <circle cx="497" cy="280" r="26" fill="#00D2FF"/>
+</svg>

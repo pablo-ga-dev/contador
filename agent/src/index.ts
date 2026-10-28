@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { migrateLegacyAutostart } from './autostart.ts';
 import { config } from './config.ts';
 import { Reminders } from './core/reminders.ts';
 import { Tracker } from './core/tracker.ts';
@@ -45,8 +46,9 @@ try {
 sync.start();
 reminders.start();
 windows.start((sample) => tracker.handle(sample));
+migrateLegacyAutostart().catch((err) => console.error(`[arranque] ${err instanceof Error ? err.message : err}`));
 
-console.log(`Contador en marcha. Datos en ${dbFile}`);
+console.log(`DIALOGUE en marcha. Datos en ${dbFile}`);
 console.log(`Panel: http://127.0.0.1:${config.port} (o npm run panel para abrirlo en su ventana)`);
 console.log('Pulsa Ctrl+C (o npm run parar) para parar.');
 

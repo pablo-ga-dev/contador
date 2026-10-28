@@ -1,40 +1,69 @@
-/* Estilos compartidos por las páginas del panel. */
+/* Identidad DIALOGUE y estilos compartidos por las páginas del panel. */
+
+/* Las fuentes se instalan con "npm run fuentes" (no están en el repositorio por su licencia).
+   Si faltan, se usan las del sistema. */
+@font-face {
+  font-family: 'Technor';
+  src: url('/fonts/Technor-Semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Supreme';
+  src: url('/fonts/Supreme-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
-  --surface-0: #f4f4f2;
-  --surface-1: #fcfcfb;
-  --border: #e4e3df;
-  --track: #edece8;
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  --text-muted: #7a7974;
-  --accent: #2a78d6;
-  --accent-text: #ffffff;
-  --bar: #2a78d6;
-  --live: #0ca30c;
-  --ok: #0c8a0c;
-  --warning: #b86e00;
-  --danger: #c43d3c;
-  --tooltip-bg: #1a1a19;
-  --tooltip-text: #f0efec;
-  --shadow: 0 8px 24px rgba(0, 0, 0, .14);
+  /* Paleta DIALOGUE */
+  --deep-steel: #0B132B;
+  --cobalt-plate: #1C3D5A;
+  --temporal-pulse: #00D2FF;
+  --platinum-frame: #E2E8F0;
+  --pure-clean: #F8FAFC;
+  --idle: #64748B;
+
+  --font-title: 'Technor', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-text: 'Supreme', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+
+  --surface-0: var(--pure-clean);
+  --surface-1: #FFFFFF;
+  --border: var(--platinum-frame);
+  --track: #EEF2F7;
+  --text-primary: var(--deep-steel);
+  --text-secondary: #475569;
+  --text-muted: var(--idle);
+  --accent: var(--cobalt-plate);
+  --accent-text: #FFFFFF;
+  /* El cian puro no contrasta lo bastante sobre blanco: en modo claro, uno más oscuro. */
+  --bar: #0A8FB0;
+  --live: #0A8FB0;
+  --ok: #047857;
+  --warning: #B45309;
+  --danger: #C2410C;
+  --tooltip-bg: var(--deep-steel);
+  --tooltip-text: var(--platinum-frame);
+  --shadow: 0 8px 24px rgba(11, 19, 43, .14);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --surface-0: #121211;
-    --surface-1: #1a1a19;
-    --border: #2c2c2a;
-    --track: #262624;
-    --text-primary: #f0efec;
-    --text-secondary: #c3c2b7;
-    --text-muted: #8f8e86;
-    --accent: #3987e5;
-    --bar: #3987e5;
-    --live: #2fbf2f;
-    --ok: #2fbf2f;
-    --warning: #fab219;
-    --danger: #e66767;
-    --tooltip-bg: #f0efec;
-    --tooltip-text: #1a1a19;
+    --surface-0: var(--deep-steel);
+    --surface-1: #111B36;
+    --border: #1F3352;
+    --track: #16264A;
+    --text-primary: var(--platinum-frame);
+    --text-secondary: #94A3B8;
+    --text-muted: var(--idle);
+    --accent: var(--temporal-pulse);
+    --accent-text: var(--deep-steel);
+    --bar: var(--temporal-pulse);
+    --live: var(--temporal-pulse);
+    --ok: #34D399;
+    --warning: #FBBF24;
+    --danger: #F87171;
+    --tooltip-bg: var(--platinum-frame);
+    --tooltip-text: var(--deep-steel);
     --shadow: 0 8px 24px rgba(0, 0, 0, .5);
   }
 }
@@ -45,29 +74,40 @@ body {
   margin: 0;
   background: var(--surface-0);
   color: var(--text-primary);
-  font: 14px/1.45 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  font: 14px/1.5 var(--font-text);
 }
+h1, h2, h3, .title, .hero { font-family: var(--font-title); font-weight: 600; }
 .num { font-variant-numeric: tabular-nums; }
 .muted { color: var(--text-muted); }
 a { color: var(--accent); }
 
+/* La cabecera es siempre Deep Steel, en modo claro y oscuro. */
 header {
   display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-1);
+  padding: 0 24px; min-height: 56px;
+  background: var(--deep-steel); color: var(--platinum-frame);
 }
-header h1 { margin: 0; font-size: 18px; font-weight: 600; }
-header nav { display: flex; gap: 4px; flex: 1; }
+.brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+.brand img { width: 26px; height: 26px; }
+.brand span { font: 600 16px/1 var(--font-title); letter-spacing: .08em; }
+header nav { display: flex; gap: 4px; flex: 1; align-self: stretch; }
 header nav a {
-  padding: 6px 12px; border-radius: 6px;
-  color: var(--text-secondary); text-decoration: none;
+  display: flex; align-items: center; padding: 0 12px;
+  color: #94A3B8; text-decoration: none; border-bottom: 2px solid transparent;
 }
-header nav a:hover { background: var(--track); color: var(--text-primary); }
-header nav a[aria-current="page"] { background: var(--track); color: var(--text-primary); font-weight: 600; }
+header nav a:hover { color: var(--platinum-frame); }
+header nav a[aria-current="page"] { color: var(--platinum-frame); border-bottom-color: var(--temporal-pulse); }
+header button { color: var(--platinum-frame); border-color: var(--cobalt-plate); }
+header button:hover:not(:disabled) { background: var(--cobalt-plate); }
 
 .day-nav { display: flex; align-items: center; gap: 4px; }
-.day-nav span { min-width: 210px; text-align: center; font-weight: 500; }
+.day-nav span { min-width: 210px; text-align: center; font-family: var(--font-title); }
+@media (max-width: 760px) {
+  header { gap: 10px; padding: 8px 12px; }
+  .brand span { display: none; }
+  header nav a { padding: 0 8px; }
+  .day-nav span { min-width: 150px; }
+}
 
 button {
   font: inherit; color: var(--text-primary);
@@ -77,14 +117,15 @@ button {
 button:hover:not(:disabled) { background: var(--track); }
 button:disabled { opacity: .45; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
 
 input[type="text"], input[type="url"], input[type="password"], input[type="search"] {
   font: inherit; color: var(--text-primary);
   width: 100%; padding: 7px 10px;
   background: var(--surface-0); border: 1px solid var(--border); border-radius: 6px;
 }
-input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--temporal-pulse); outline-offset: 1px; }
+input[type="checkbox"] { accent-color: var(--accent); }
 
 main { padding: 20px 24px 32px; max-width: 1200px; margin: 0 auto; }
 .card {
@@ -92,15 +133,14 @@ main { padding: 20px 24px 32px; max-width: 1200px; margin: 0 auto; }
   padding: 16px 18px;
 }
 .card h2 {
-  margin: 0 0 12px; font-size: 12px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: .06em; color: var(--text-secondary);
+  margin: 0 0 12px; font-size: 12px;
+  text-transform: uppercase; letter-spacing: .08em; color: var(--text-secondary);
 }
 
 .banner {
   margin-bottom: 16px; padding: 12px 16px; border-radius: 10px;
   background: var(--surface-1); border: 1px solid var(--warning);
 }
-.banner a { color: var(--accent); }
 .msg { min-height: 1.4em; font-size: 13px; }
 .msg.error { color: var(--danger); }
 .msg.ok { color: var(--ok); }
