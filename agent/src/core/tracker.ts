@@ -13,14 +13,17 @@ export class Tracker {
   private current: Segment | null = null;
   private store: SegmentStore;
   private browser: BrowserSource;
+  /** Segundos sin teclado ni ratón tras los que se deja de contar (configurable en Ajustes). */
+  private idleThresholdSeconds: () => number;
 
-  constructor(store: SegmentStore, browser: BrowserSource) {
+  constructor(store: SegmentStore, browser: BrowserSource, idleThresholdSeconds: () => number) {
     this.store = store;
     this.browser = browser;
+    this.idleThresholdSeconds = idleThresholdSeconds;
   }
 
   handle(sample: WindowSample): void {
-    if (!sample.app || sample.idleSeconds >= config.idleThresholdSeconds) {
+    if (!sample.app || sample.idleSeconds >= this.idleThresholdSeconds()) {
       this.stopAt(new Date(sample.at.getTime() - sample.idleSeconds * 1000));
       return;
     }
