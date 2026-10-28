@@ -197,6 +197,9 @@ Para parar la base de datos: `npm run db:down` (los datos se conservan).
   mayúsculas) y el tiempo total de cada uno. Al pulsar un cliente, su ficha:
   total, este mes y personas; tiempo por mes (cada mes enlaza a su detalle en
   Tiempos), por persona, sus webs, chats y apps, y los comentarios recientes.
+  **Borrar cliente**: si tiene tiempo confirmado, se elige adónde pasa (a «Sin
+  cliente» o a otro cliente, que sirve para unir duplicados) junto con sus
+  comentarios y reglas; nunca se pierden horas.
 - **Comentarios**: los escritos al confirmar el día aparecen en el detalle del
   día de cada persona (el general arriba, el de cada cliente bajo su nombre) y
   en el detalle de cada cliente.

@@ -18,7 +18,19 @@
   .clients .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .clients .time { color: var(--text-secondary); white-space: nowrap; font-size: 13px; }
 
+  .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
   .detail h3 { margin: 0; font-size: 20px; }
+  .delete-box {
+    margin: 0 0 18px; padding: 14px; border-radius: 8px;
+    border: 1px solid var(--danger); background: var(--surface-0);
+  }
+  .delete-box p { margin: 0 0 10px; color: var(--text-primary); }
+  .delete-box select {
+    display: block; width: 100%; margin-bottom: 12px; padding: 7px 10px; font: inherit;
+    color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px;
+  }
+  button.danger-solid { background: var(--danger); border-color: var(--danger); color: var(--accent-text); }
+  button.danger-solid:hover:not(:disabled) { background: var(--danger); filter: brightness(1.1); }
   .detail .since { margin: 2px 0 16px; color: var(--text-muted); font-size: 13px; }
   .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
   .kpi { background: var(--surface-0); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
@@ -118,10 +130,16 @@
   function renderDetail(d) {
     const detail = $('detail');
     detail.replaceChildren();
-    detail.append(
+    const head = el('div', 'detail-head');
+    const titles = el('div');
+    titles.append(
       el('h3', '', d.name),
       el('p', 'since', `Cliente desde el ${new Date(d.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`),
     );
+    const remove = el('button', 'danger', 'Borrar cliente');
+    remove.addEventListener('click', () => showDelete(d, detail));
+    head.append(titles, remove);
+    detail.append(head);
 
     const thisMonth = d.byMonth.find((m) => m.month === todayISO().slice(0, 7))?.seconds ?? 0;
     const kpis = el('div', 'kpis');
@@ -195,6 +213,65 @@
 
     sections.append(months, people, activities, notes);
     detail.append(sections);
+  }
+
+  /**
+   * Paso de confirmación para borrar. Si el cliente tiene tiempo, hay que elegir adónde
+   * pasa (Sin cliente u otro cliente, para unir duplicados): nunca se pierden horas.
+   */
+  function showDelete(d, detail) {
+    detail.querySelector('.delete-box')?.remove();
+    const box = el('div', 'delete-box');
+    box.setAttribute('role', 'region');
+    box.setAttribute('aria-label', `Borrar ${d.name}`);
+    let target = null;
+    if (d.totalSeconds > 0) {
+      box.append(el('p', '', `«${d.name}» tiene ${formatDuration(d.totalSeconds)} de tiempo confirmado, con sus comentarios. ¿Adónde lo pasamos?`));
+      target = el('select');
+      target.setAttribute('aria-label', 'Adónde pasa el tiempo');
+      target.append(new Option('A «Sin cliente»', ''));
+      for (const c of clients.filter((c) => c.id !== d.id)) target.append(new Option(`A «${c.name}» (unir los dos)`, String(c.id)));
+      box.append(target);
+    } else {
+      box.append(el('p', '', `«${d.name}» no tiene tiempo confirmado.`));
+    }
+    const actions = el('div', 'row');
+    const confirm = el('button', 'danger-solid', `Borrar «${d.name}»`);
+    const cancel = el('button', '', 'Cancelar');
+    const msg = el('div', 'msg');
+    actions.append(confirm, cancel);
+    box.append(actions, msg);
+    cancel.addEventListener('click', () => box.remove());
+    confirm.addEventListener('click', async () => {
+      confirm.disabled = true;
+      const moveTo = target && target.value ? Number(target.value) : null;
+      try {
+        const r = await api('DELETE', `/api/clients/${d.id}`, { moveTo });
+        clients = clients.filter((c) => c.id !== d.id);
+        totals.delete(d.id);
+        if (moveTo !== null) {
+          const prev = totals.get(moveTo);
+          totals.set(moveTo, { id: moveTo, seconds: (prev?.seconds ?? 0) + r.movedSeconds });
+        }
+        say('msg', r.movedSeconds
+          ? `«${r.deleted}» borrado. Su tiempo (${formatDuration(r.movedSeconds)}) ha pasado a ${r.movedTo ? `«${r.movedTo}»` : '«Sin cliente»'}.`
+          : `«${r.deleted}» borrado.`, 'ok');
+        if (moveTo !== null) {
+          select(moveTo);
+        } else {
+          selected = null;
+          history.replaceState(null, '', '/clientes');
+          renderList();
+          $('detail').replaceChildren(el('p', 'placeholder', 'Elige un cliente para ver el tiempo que se le ha dedicado.'));
+        }
+      } catch (err) {
+        confirm.disabled = false;
+        msg.className = 'msg error';
+        msg.textContent = err.message;
+      }
+    });
+    detail.querySelector('.detail-head').after(box);
+    (target ?? confirm).focus();
   }
 
   function section(title) {
