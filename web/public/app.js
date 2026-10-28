@@ -26,8 +26,7 @@ const PAGES = [['/', 'Tiempos'], ['/clientes', 'Clientes'], ['/ajustes', 'Ajuste
 export async function startPage(current) {
   const me = await api('GET', '/api/auth/me');
   const header = document.createElement('header');
-  const title = document.createElement('h1');
-  title.textContent = 'Contador';
+  const title = brand();
   const nav = document.createElement('nav');
   for (const [href, label] of PAGES) {
     const a = document.createElement('a');
@@ -49,6 +48,20 @@ export async function startPage(current) {
   header.append(title, nav, who, logout);
   document.body.prepend(header);
   return me;
+}
+
+/** Logo y nombre DIALOGUE, enlazando a la página principal. */
+export function brand() {
+  const a = document.createElement('a');
+  a.className = 'brand';
+  a.href = '/';
+  const img = document.createElement('img');
+  img.src = '/logo.svg';
+  img.alt = '';
+  const name = document.createElement('span');
+  name.textContent = 'DIALOGUE';
+  a.append(img, name);
+  return a;
 }
 
 export function say(id, text, kind = 'error') {

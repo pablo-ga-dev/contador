@@ -52,5 +52,5 @@ app.onError((err, c) => {
 });
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`Contador web en http://localhost:${info.port}`);
+  console.log(`DIALOGUE web en http://localhost:${info.port}`);
 });
