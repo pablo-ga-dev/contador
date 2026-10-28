@@ -3,6 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.ts';
 import { dayRange, localDate } from '../core/day-range.ts';
+import { pendingDays } from '../core/pending-days.ts';
+import { MAX_REMINDER_HOURS, MIN_REMINDER_HOURS, reminderSettings } from '../core/reminders.ts';
+import { autostartStatus, setAutostart } from '../autostart.ts';
 import type { ActivityKind, Assignment, Bucket } from '../core/types.ts';
 import type { BrowserReceiver } from '../sources/browser/browser-receiver.ts';
 import type { ReviewStore } from '../storage/review-store.ts';
@@ -22,8 +25,6 @@ const STATIC_FILES: Record<string, [string, string]> = {
 const MAX_BODY_BYTES = 1024 * 1024;
 /** Un tramo cuyo final es más reciente que esto se considera "lo que estás haciendo ahora". */
 const CURRENT_MAX_AGE_MS = config.pollIntervalSeconds * 3 * 1000;
-/** Cuántos días hacia atrás se buscan días sin confirmar. */
-const PENDING_LOOKBACK_DAYS = 14;
 /** Límites del tiempo de inactividad configurable en Ajustes. */
 const MIN_IDLE_MINUTES = 1;
 const MAX_IDLE_MINUTES = 60;
@@ -48,6 +49,8 @@ export interface LocalServerDeps {
   browser: BrowserReceiver;
   web: WebClient;
   sync: DaySync;
+  /** Para el agente (cierra bien el tramo actual y sale). */
+  onShutdown: () => void;
 }
 
 /**
@@ -63,6 +66,9 @@ export interface LocalServerDeps {
  *   DELETE /api/settings/connection  desconecta el agente de la web
  *   PUT  /api/settings/tracking minutos de inactividad tras los que se deja de contar
  *   POST /api/sync              envía ahora los días pendientes
+ *   PUT  /api/settings/reminders  recordatorio diario y revisión de pendientes al encender
+ *   GET|PUT /api/settings/autostart  arranque con Windows
+ *   POST /api/shutdown          para el agente (npm run parar)
  */
 export class LocalServer {
   private server: http.Server | null = null;
@@ -72,7 +78,8 @@ export class LocalServer {
     this.deps = deps;
   }
 
-  start(): void {
+  /** Empieza a escuchar. Falla si el puerto está ocupado (normalmente, porque ya hay otro agente). */
+  start(): Promise<void> {
     this.server = http.createServer((req, res) => {
       this.route(req, res).catch((err: unknown) => {
         if (err instanceof RequestError) return sendJson(res, err.status, { error: err.message });
@@ -81,8 +88,15 @@ export class LocalServer {
         res.end();
       });
     });
-    this.server.on('error', (err) => console.error(`[servidor] ${err.message}`));
-    this.server.listen(this.deps.port, '127.0.0.1');
+    const server = this.server;
+    return new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(this.deps.port, '127.0.0.1', () => {
+        server.off('error', reject);
+        server.on('error', (err) => console.error(`[servidor] ${err.message}`));
+        resolve();
+      });
+    });
   }
 
   stop(): void {
@@ -143,6 +157,23 @@ export class LocalServer {
       await this.deps.sync.sendPending();
       return sendJson(res, 200, this.settings());
     }
+    if (method === 'PUT' && url.pathname === '/api/settings/reminders') {
+      return sendJson(res, 200, this.saveReminders(await readJson(req)));
+    }
+    if (method === 'GET' && url.pathname === '/api/settings/autostart') {
+      return sendJson(res, 200, await autostartStatus());
+    }
+    if (method === 'PUT' && url.pathname === '/api/settings/autostart') {
+      const { enabled } = await readJson(req);
+      if (typeof enabled !== 'boolean') throw new RequestError(400, 'Falta enabled (true o false).');
+      await setAutostart(enabled);
+      return sendJson(res, 200, await autostartStatus());
+    }
+    if (method === 'POST' && url.pathname === '/api/shutdown') {
+      sendJson(res, 202, { stopping: true });
+      setImmediate(this.deps.onShutdown);
+      return;
+    }
     res.writeHead(404).end();
   }
 
@@ -195,19 +226,7 @@ export class LocalServer {
       today: day === localDate(new Date()),
       activities: this.deps.segments.activities(from, to),
       confirmed: this.deps.reviews.get(day),
-      pending: this.pendingDays(),
-    };
-  }
-
-  /** Días recientes con actividad sin confirmar (sin contar hoy) y días confirmados sin enviar. */
-  private pendingDays() {
-    const today = parseDay(undefined).from;
-    const since = new Date(today);
-    since.setDate(since.getDate() - PENDING_LOOKBACK_DAYS);
-    const confirmed = this.deps.reviews.confirmedDates();
-    return {
-      unconfirmed: this.deps.segments.activeDates(since, today).filter((d) => !confirmed.has(d)),
-      unsent: this.deps.reviews.unsent().map((d) => ({ date: d.date, error: d.lastError })),
+      pending: pendingDays(this.deps.segments, this.deps.reviews),
     };
   }
 
@@ -265,8 +284,25 @@ export class LocalServer {
         lastError: unsent.find((d) => d.lastError)?.lastError ?? null,
       },
       idleMinutes: Number(reviews.getSetting('idleMinutes') ?? config.idleThresholdSeconds / 60),
+      reminders: reminderSettings(reviews),
       dataFile: dbFile,
     };
+  }
+
+  private saveReminders(body: Record<string, unknown>) {
+    const hours = Number(body.hours);
+    // Medias horas: 7,5 h son las 7 h 30 min por defecto.
+    if (!Number.isFinite(hours) || hours < MIN_REMINDER_HOURS || hours > MAX_REMINDER_HOURS || (hours * 2) % 1 !== 0) {
+      throw new RequestError(400, `Las horas deben estar entre ${MIN_REMINDER_HOURS} y ${MAX_REMINDER_HOURS}, en medias horas.`);
+    }
+    if (typeof body.enabled !== 'boolean' || typeof body.startupReview !== 'boolean') {
+      throw new RequestError(400, 'Faltan enabled y startupReview (true o false).');
+    }
+    const { reviews } = this.deps;
+    reviews.setSetting('reminderEnabled', String(body.enabled));
+    reviews.setSetting('reminderHours', String(hours));
+    reviews.setSetting('startupReview', String(body.startupReview));
+    return this.settings();
   }
 
   /** Olvida el código y la cuenta; la dirección de la web se conserva para volver a conectar. */

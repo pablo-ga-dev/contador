@@ -42,8 +42,17 @@ apuntar nada a mano.
 
 ```bash
 npm install
-npm start
+npm run arrancar
 ```
+
+`npm run arrancar` lo deja funcionando **en segundo plano, sin ventanas**, y no
+depende de que la terminal siga abierta. Si ya estaba en marcha, no arranca otro
+(dos agentes contarían el tiempo dos veces). Para pararlo: `npm run parar`.
+Lo que escribe el agente se guarda en `%LOCALAPPDATA%\contador\agente.log` y
+`agente-error.log`. Para verlo en la propia terminal, usa `npm start`.
+
+Para que arranque solo al iniciar sesión en Windows, actívalo en
+**Ajustes → Arranque con Windows** (no necesita permisos de administrador).
 
 ### Panel
 
@@ -76,6 +85,12 @@ Tiene tres páginas:
   - *Envíos a la web*: último envío, días pendientes y su motivo, y «Enviar ahora».
   - *Seguimiento*: minutos sin teclado ni ratón tras los que se deja de contar
     (por defecto 3; súbelo si ves vídeos o estás en videollamadas).
+  - *Recordatorios*: abrir «Revisar día» tras 7 h 30 min (configurable) desde
+    la primera actividad del día si aún no lo has confirmado, y al encender el
+    PC, abrir los días que quedaron sin confirmar. Cada aviso sale como mucho
+    una vez al día y solo si estás delante del PC.
+  - *Arranque con Windows*: activarlo o desactivarlo. Avisa si el proyecto se
+    ha movido de carpeta y hay que volver a activarlo.
   - *Datos en este PC*: dónde se guarda todo.
 
 Lo marcado como **Personal** no sale nunca del PC.
@@ -215,13 +230,12 @@ podría mostrarlo tal cual en su ventana.
   tiempo se seguirá contando como WhatsApp, pero sin chat, hasta que lo ajustemos.
 - WhatsApp Web en el navegador cuenta por dominio (`web.whatsapp.com`), aún sin chat.
 - La extensión es solo para navegadores Chromium (Chrome, Edge, Brave...); Firefox aún no.
-- El agente hay que arrancarlo a mano; el arranque con Windows vendrá después.
+- El arranque con Windows apunta a la carpeta del proyecto: si la mueves, vuelve
+  a activarlo en Ajustes. Al iniciar sesión puede verse un instante una ventana
+  de PowerShell.
 
 ## Próximos pasos
 
-1. Informes en la web: usuario × día y cliente × mes.
-2. Recordatorio 7 h 30 min después del primer encendido del día, revisión de
-   días pendientes al encender y arranque del agente con Windows.
-3. Aviso al apagar el PC.
-4. Despliegue de la web en el servidor (HTTPS, `COOKIE_SECURE=true`).
-5. WhatsApp Web en el navegador: detectar el chat desde la extensión.
+1. Aviso al apagar el PC.
+2. Despliegue de la web en el servidor (HTTPS, `COOKIE_SECURE=true`).
+3. WhatsApp Web en el navegador: detectar el chat desde la extensión.

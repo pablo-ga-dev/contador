@@ -33,6 +33,8 @@
   }
   a.button:hover { background: var(--track); }
   code.path { font: 13px/1.4 Consolas, "Cascadia Mono", monospace; }
+  label.check { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--text-primary); font-size: 14px; }
+  label.check input[type="number"] { margin: 0; }
 </style>
 </head>
 <body>
@@ -112,6 +114,36 @@
   </section>
 
   <section class="card">
+    <h2>Recordatorios</h2>
+    <form id="reminders-form">
+      <label class="check">
+        <input type="checkbox" name="enabled">
+        Abrir «Revisar día» tras
+        <input type="number" name="hours" min="1" max="12" step="0.5" required>
+        h usando el PC
+      </label>
+      <label class="check">
+        <input type="checkbox" name="startupReview">
+        Al encender el PC, abrir los días que queden sin confirmar
+      </label>
+      <p class="help">Cada aviso sale como mucho una vez al día, y solo si estás delante del PC.</p>
+      <div class="row">
+        <button type="submit">Guardar</button>
+        <span class="msg" id="reminders-msg"></span>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Arranque con Windows</h2>
+    <p class="help" id="autostart-state">Comprobando…</p>
+    <div class="row">
+      <button id="autostart-toggle" disabled>Activar</button>
+      <span class="msg" id="autostart-msg"></span>
+    </div>
+  </section>
+
+  <section class="card">
     <h2>Datos en este PC</h2>
     <p class="help">
       Todo lo que registra el agente se guarda solo aquí. A la web solo llega lo que
@@ -163,8 +195,54 @@
     $('sync-now').disabled = s.sync.unsent.length === 0;
 
     $('tracking-form').idleMinutes.value = s.idleMinutes;
+    const reminders = $('reminders-form');
+    reminders.enabled.checked = s.reminders.enabled;
+    reminders.hours.value = s.reminders.hours;
+    reminders.startupReview.checked = s.reminders.startupReview;
     $('data-file').textContent = s.dataFile;
   }
+
+  function renderAutostart(status) {
+    const button = $('autostart-toggle');
+    button.disabled = false;
+    button.textContent = status.enabled ? 'Desactivar' : 'Activar';
+    button.className = status.enabled ? 'danger' : 'primary';
+    button.onclick = () => toggleAutostart(!status.enabled);
+    $('autostart-state').textContent = !status.enabled
+      ? 'Desactivado: tendrás que arrancar el agente a mano (npm run arrancar) cada vez que enciendas el PC.'
+      : status.upToDate
+        ? 'Activado: el agente arranca solo y sin ventanas al iniciar sesión en Windows.'
+        : 'Activado, pero apunta a otra carpeta (¿has movido el proyecto?). Vuelve a activarlo para corregirlo.';
+    if (status.enabled && !status.upToDate) {
+      button.textContent = 'Volver a activar';
+      button.className = 'primary';
+      button.onclick = () => toggleAutostart(true);
+    }
+  }
+
+  async function toggleAutostart(enabled) {
+    $('autostart-toggle').disabled = true;
+    try {
+      renderAutostart(await api('PUT', '/api/settings/autostart', { enabled }));
+      say('autostart-msg', enabled ? 'Activado.' : 'Desactivado.', 'ok');
+    } catch (err) {
+      $('autostart-toggle').disabled = false;
+      say('autostart-msg', err.message);
+    }
+  }
+
+  $('reminders-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    try {
+      render(await api('PUT', '/api/settings/reminders', {
+        enabled: f.enabled.checked, hours: Number(f.hours.value), startupReview: f.startupReview.checked,
+      }));
+      say('reminders-msg', 'Guardado.', 'ok');
+    } catch (err) {
+      say('reminders-msg', err.message);
+    }
+  });
 
   function showForm(visible) {
     form.hidden = !visible;
@@ -230,6 +308,7 @@
   });
 
   render(await api('GET', '/api/settings'));
+  api('GET', '/api/settings/autostart').then(renderAutostart, (err) => say('autostart-msg', err.message));
 </script>
 </body>
 </html>
