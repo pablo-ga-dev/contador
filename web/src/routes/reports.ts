@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { requireUser, type AppEnv } from '../auth/middleware.ts';
+import { budgetSummary, loadBudgets } from '../budget.ts';
 import { sql } from '../db/index.ts';
 import { HttpError } from '../http.ts';
 
@@ -147,6 +148,19 @@ reportRoutes.get('/clients', async (c) => {
   return c.json(rows.map((r) => ({ id: r.id, seconds: r.seconds, lastDate: r.last_date })));
 });
 
+/** Clientes con seguimiento de horas que las han agotado o se han pasado. */
+reportRoutes.get('/alerts', async (c) => {
+  const budgets = await loadBudgets();
+  const ids = [...budgets].filter(([, b]) => b.status === 'exhausted' || b.status === 'over').map(([id]) => id);
+  if (ids.length === 0) return c.json([]);
+  const names = await sql<{ id: number; name: string }[]>`SELECT id, name FROM clients WHERE id IN ${sql(ids)}`;
+  return c.json(
+    names
+      .map((n) => ({ id: n.id, name: n.name, ...budgetSummary(budgets.get(n.id))! }))
+      .sort((a, b) => b.excess - a.excess || a.name.localeCompare(b.name, 'es')),
+  );
+});
+
 /** Todo lo de un cliente: total, por mes, por persona, actividades y comentarios recientes. */
 reportRoutes.get('/clients/:id', async (c) => {
   const clientId = parseId(c.req.param('id'), 'el cliente');
@@ -179,6 +193,7 @@ reportRoutes.get('/clients/:id', async (c) => {
     byUser,
     activities,
     notes,
+    hours: (await loadBudgets([clientId])).get(clientId),
   });
 });
 

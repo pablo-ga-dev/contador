@@ -100,7 +100,7 @@
 <script type="module">
   import {
     KIND_LABELS, activityLabel, addDays, addMonths, api, capitalize, el, fmtDate, formatDuration,
-    groupLabel, mondayOf, monthLabel, startPage, todayISO,
+    groupLabel, mondayOf, monthLabel, showHoursAlerts, startPage, todayISO,
   } from '/app.js';
 
   const $ = (id) => document.getElementById(id);
@@ -320,6 +320,7 @@
 
   await startPage('/');
   setView(state.view);
+  showHoursAlerts();
 </script>
 </body>
 </html>

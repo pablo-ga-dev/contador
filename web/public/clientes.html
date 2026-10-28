@@ -19,6 +19,26 @@
   .clients .time { color: var(--text-secondary); white-space: nowrap; font-size: 13px; }
 
   .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .hours { margin: 0 0 20px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-0); }
+  .hours-title { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .hours-title h4 { margin: 0; font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .08em; }
+  .hours .check { display: flex; align-items: center; gap: 8px; color: var(--text-primary); font-size: 14px; }
+  .hours .check input { width: auto; margin: 0; }
+  .hours .small { margin: 4px 0 0; font-size: 13px; }
+  .hours-grid { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 12px 0; }
+  .hours-grid label { margin: 0; flex: 1 1 130px; }
+  .hours-grid button { flex: none; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0 0 8px; }
+  .facts dt { color: var(--text-secondary); }
+  .facts dd { margin: 0; }
+  .packs { list-style: none; margin: 0 0 4px; padding: 0; }
+  .packs li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
+  .packs .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .packs .value { color: var(--text-secondary); white-space: nowrap; }
+  .packs .spent { color: var(--text-muted); text-decoration: line-through; }
+  button.link { border: 0; padding: 2px 4px; color: var(--accent); }
+  button.link.danger { color: var(--danger); }
+  .clients .name .badge { margin-left: 4px; }
   .detail h3 { margin: 0; font-size: 20px; }
   .delete-box {
     margin: 0 0 18px; padding: 14px; border-radius: 8px;
@@ -82,7 +102,8 @@
 </main>
 <script type="module">
   import {
-    KIND_LABELS, activityLabel, api, capitalize, el, fmtDate, formatDuration, monthLabel, say, startPage, todayISO,
+    KIND_LABELS, activityLabel, api, capitalize, el, fmtDate, formatDuration, hoursLabel, monthLabel, say,
+    showHoursAlerts, startPage, todayISO,
   } from '/app.js';
 
   const $ = (id) => document.getElementById(id);
@@ -106,7 +127,14 @@
       const button = el('button');
       button.setAttribute('aria-current', String(c.id === selected));
       const t = totals.get(c.id);
-      button.append(el('span', 'name', c.name), el('span', 'time num', t ? formatDuration(t.seconds) : 'sin tiempo'));
+      const name = el('span', 'name', c.name);
+      // Solo se marca a quien tiene seguimiento de horas y las ha agotado o se ha pasado.
+      if (c.hours && c.hours.status !== 'ok') {
+        const badge = el('span', `badge ${c.hours.status}`, c.hours.status === 'over' ? `+${formatDuration(c.hours.excess)}` : 'Agotado');
+        badge.title = hoursLabel(c.hours);
+        name.append(' ', badge);
+      }
+      button.append(name, el('span', 'time num', t ? formatDuration(t.seconds) : 'sin tiempo'));
       button.addEventListener('click', () => select(c.id));
       li.append(button);
       list.append(li);
@@ -152,7 +180,7 @@
       kpi.append(el('div', 'label', label), el('div', 'value num', value));
       kpis.append(kpi);
     }
-    detail.append(kpis);
+    detail.append(kpis, hoursSection(d));
 
     if (d.totalSeconds === 0) {
       detail.append(el('p', 'muted', 'Todavía nadie ha confirmado tiempo para este cliente.'));
@@ -274,6 +302,153 @@
     (target ?? confirm).focus();
   }
 
+  // --- Horas contratadas ----------------------------------------------------
+
+  const longDate = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+  const hoursValue = (seconds) => String(Math.round((seconds / 3600) * 100) / 100);
+
+  /** Seguimiento de horas: cuota mensual, bonos y lo que queda. Se vuelve a pintar tras cada cambio. */
+  function hoursSection(d) {
+    const box = el('div', 'hours');
+    box.id = 'hours';
+    fillHours(box, d.id, d.hours);
+    return box;
+  }
+
+  function fillHours(box, clientId, h) {
+    box.replaceChildren();
+    const title = el('div', 'hours-title');
+    title.append(el('h4', '', 'Horas contratadas'));
+    if (h?.status && h.status !== 'none') title.append(el('span', `badge ${h.status}`, hoursLabel(h)));
+    box.append(title);
+
+    const toggle = el('label', 'check');
+    const box1 = el('input');
+    box1.type = 'checkbox';
+    box1.checked = Boolean(h?.tracking);
+    toggle.append(box1, ' Hacer seguimiento de horas');
+    box.append(toggle);
+    box1.addEventListener('change', () => save({ trackHours: box1.checked }));
+
+    if (!h?.tracking) {
+      box.append(el('p', 'muted small', 'Actívalo para poner una cuota mensual o bonos y recibir un aviso si se agotan.'));
+      return;
+    }
+
+    // Cuota mensual y desde cuándo se cuenta.
+    const settings = el('form', 'hours-grid');
+    const monthly = el('input');
+    monthly.type = 'number';
+    monthly.min = '0';
+    monthly.step = '0.5';
+    monthly.placeholder = 'Sin cuota';
+    monthly.value = h.monthlySeconds ? hoursValue(h.monthlySeconds) : '';
+    monthly.setAttribute('aria-label', 'Horas al mes');
+    const since = el('input');
+    since.type = 'date';
+    since.value = h.trackingSince ?? '';
+    since.setAttribute('aria-label', 'Contar desde');
+    const saveBtn = el('button', '', 'Guardar');
+    saveBtn.type = 'submit';
+    const l1 = el('label', '', 'Horas al mes');
+    l1.append(monthly);
+    const l2 = el('label', '', 'Contar desde');
+    l2.append(since);
+    settings.append(l1, l2, saveBtn);
+    settings.addEventListener('submit', (e) => {
+      e.preventDefault();
+      save({ monthlyHours: monthly.value ? Number(monthly.value) : null, trackingSince: since.value || undefined });
+    });
+    box.append(settings);
+
+    // Situación de este mes y de los bonos.
+    const facts = el('dl', 'facts');
+    const fact = (term, value) => facts.append(el('dt', '', term), el('dd', 'num', value));
+    if (h.monthlySeconds) {
+      fact('Este mes', `${formatDuration(h.usedThisMonth)} de ${formatDuration(h.monthlySeconds)} · quedan ${formatDuration(h.monthlyRemaining)}`);
+    } else {
+      fact('Este mes', `${formatDuration(h.usedThisMonth)} (sin cuota mensual)`);
+    }
+    fact('En bonos', h.packs.length ? `quedan ${formatDuration(h.packsRemaining)}` : 'sin bonos');
+    if (h.excess > 0) fact('Exceso', `${formatDuration(h.excess)} por encima de lo contratado`);
+    box.append(facts);
+
+    // Bonos.
+    if (h.packs.length) {
+      const list = el('ul', 'packs');
+      for (const p of h.packs) {
+        const li = el('li');
+        const info = el('span', 'label', `Bono de ${formatDuration(p.seconds)} · ${longDate(p.purchasedOn)}${p.note ? ` · ${p.note}` : ''}`);
+        const left = el('span', `value num${p.remainingSeconds === 0 ? ' spent' : ''}`, p.remainingSeconds ? `quedan ${formatDuration(p.remainingSeconds)}` : 'gastado');
+        const remove = el('button', 'link danger', 'Quitar');
+        remove.setAttribute('aria-label', `Quitar el bono de ${formatDuration(p.seconds)} del ${longDate(p.purchasedOn)}`);
+        remove.addEventListener('click', async () => {
+          if (!confirm(`¿Quitar el bono de ${formatDuration(p.seconds)} del ${longDate(p.purchasedOn)}?`)) return;
+          try {
+            refresh(clientId, await api('DELETE', `/api/clients/${clientId}/packs/${p.id}`));
+          } catch (err) {
+            say('msg', err.message);
+          }
+        });
+        li.append(info, left, remove);
+        list.append(li);
+      }
+      box.append(list);
+    }
+
+    const add = el('form', 'hours-grid');
+    const hours = el('input');
+    hours.type = 'number';
+    hours.min = '0.5';
+    hours.step = '0.5';
+    hours.required = true;
+    hours.placeholder = 'p. ej. 5';
+    const date = el('input');
+    date.type = 'date';
+    date.value = todayISO();
+    const note = el('input');
+    note.maxLength = 200;
+    note.placeholder = 'Opcional';
+    const addBtn = el('button', 'primary', 'Añadir bono');
+    addBtn.type = 'submit';
+    const a1 = el('label', '', 'Horas del bono');
+    a1.append(hours);
+    const a2 = el('label', '', 'Comprado el');
+    a2.append(date);
+    const a3 = el('label', '', 'Nota');
+    a3.append(note);
+    add.append(a1, a2, a3, addBtn);
+    add.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        refresh(clientId, await api('POST', `/api/clients/${clientId}/packs`, {
+          hours: Number(hours.value), purchasedOn: date.value || undefined, note: note.value,
+        }));
+        say('msg', `Bono de ${hours.value} h añadido.`, 'ok');
+      } catch (err) {
+        say('msg', err.message);
+      }
+    });
+    box.append(add);
+
+    async function save(changes) {
+      try {
+        refresh(clientId, await api('PATCH', `/api/clients/${clientId}`, changes));
+      } catch (err) {
+        say('msg', err.message);
+      }
+    }
+  }
+
+  /** Tras un cambio: vuelve a pintar las horas, la marca de la lista y el aviso de arriba. */
+  async function refresh(clientId, budget) {
+    const box = $('hours');
+    if (box) fillHours(box, clientId, budget);
+    clients = await api('GET', '/api/clients');
+    renderList();
+    showHoursAlerts();
+  }
+
   function section(title) {
     const div = el('div');
     div.append(el('h4', '', title));
@@ -311,6 +486,7 @@
   clients = list;
   totals = new Map(sums.map((t) => [t.id, t]));
   renderList();
+  showHoursAlerts();
   if (selected && clients.some((c) => c.id === selected)) select(selected);
 </script>
 </body>

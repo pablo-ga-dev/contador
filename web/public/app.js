@@ -114,6 +114,34 @@ export function monthLabel(month) {
 }
 export const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** Texto corto del estado de horas de un cliente con seguimiento. */
+export function hoursLabel(h) {
+  if (!h) return '';
+  if (h.status === 'over') return `Se ha pasado ${formatDuration(h.excess)}`;
+  if (h.status === 'exhausted') return 'Horas agotadas';
+  return `Quedan ${formatDuration(h.available)}`;
+}
+
+/**
+ * Aviso de clientes que han agotado sus horas o se han pasado (solo los que tienen
+ * seguimiento y horas contratadas). Se pinta al principio de `main`.
+ */
+export async function showHoursAlerts() {
+  const alerts = await api('GET', '/api/reports/alerts').catch(() => []);
+  document.getElementById('hours-alerts')?.remove();
+  if (alerts.length === 0) return;
+  const box = el('div', 'alert');
+  box.id = 'hours-alerts';
+  box.setAttribute('role', 'status');
+  box.append(el('strong', '', alerts.length === 1 ? 'Un cliente sin horas: ' : `${alerts.length} clientes sin horas: `));
+  alerts.forEach((a, i) => {
+    const link = el('a', '', a.name);
+    link.href = `/clientes?id=${a.id}`;
+    box.append(i ? ' · ' : '', link, ` (${hoursLabel(a).toLowerCase()})`);
+  });
+  document.querySelector('main').prepend(box);
+}
+
 /** Crea un elemento con clase y texto. */
 export function el(tag, className, text) {
   const node = document.createElement(tag);
