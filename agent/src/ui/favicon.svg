@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
-  <!-- El logo sobre fondo Deep Steel, para que se vea en pestañas y barras claras. -->
-  <rect width="640" height="640" rx="128" fill="#0B132B"/>
+  <!-- El logo sobre fondo Deep Night, para que se vea en pestañas y barras claras. -->
+  <rect width="640" height="640" rx="128" fill="#040914"/>
   <g transform="translate(40 40)" fill="none">
     <path d="M166 8H394L552 166V394L394 552H166L8 394V166Z" stroke="#E2E8F0" stroke-width="22" stroke-linejoin="miter"/>
     <path d="M492 234A216 216 0 1 0 492 326" stroke="#E2E8F0" stroke-width="22"/>

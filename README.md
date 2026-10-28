@@ -13,14 +13,15 @@ compartida por el equipo, en vuestro propio servidor.
 ## Identidad
 
 - **Nombre:** DIALOGUE (de *dia-*, «a través de», y del *dial* de un cronógrafo).
-- **Paleta:** Deep Steel `#0B132B` (fondos y cabeceras), Cobalt Plate `#1C3D5A`,
-  Temporal Pulse `#00D2FF` (estados activos y seguimiento en marcha), Platinum
-  Frame `#E2E8F0` (bordes) y Pure Clean `#F8FAFC` (fondo claro).
-- **Tipografías:** Technor Semibold para títulos y Supreme Regular para textos,
-  de [Fontshare](https://www.fontshare.com). Su licencia permite usarlas en
-  nuestra web y nuestra app, pero no publicarlas, así que **no están en el
-  repositorio**. En cada máquina (y en el servidor) se instalan desde el zip
-  descargado de Fontshare:
+- **Paleta:** Deep Night `#040914` (fondo oscuro, cabeceras), Deep Steel
+  `#0B132B` (texto en modo claro), Cobalt Plate `#1C3D5A`, Temporal Pulse
+  `#00D2FF` (estados activos y seguimiento en marcha), Platinum Frame `#E2E8F0`
+  (bordes) y Pure Clean `#F8FAFC` (fondo claro).
+- **Tipografías:** Outfit SemiBold para títulos y Switzer Light para textos, de
+  [Fontshare](https://www.fontshare.com). Switzer tiene una licencia que permite
+  usarla en nuestra web y nuestra app pero no publicarla (Outfit es libre, OFL),
+  así que **no están en el repositorio**. En cada máquina (y en el servidor) se
+  instalan desde el zip descargado de Fontshare:
 
   ```bash
   npm run fuentes -- C:\ruta\FontshareKit-XXXX.zip

@@ -1,4 +1,4 @@
-// Instala las fuentes de la marca (Technor Semibold y Supreme Regular) desde el zip
+// Instala las fuentes de la marca (Outfit SemiBold y Switzer Light) desde el zip
 // de Fontshare en el panel del agente y en la web.
 // Uso: npm run fuentes -- C:\ruta\FontshareKit-XXXX.zip
 //
@@ -11,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const FONTS = ['Technor-Semibold.woff2', 'Supreme-Regular.woff2'];
+const FONTS = ['Outfit-SemiBold.woff2', 'Switzer-Light.woff2'];
 const root = fileURLToPath(new URL('..', import.meta.url));
 const targets = [path.join(root, 'agent/src/ui/fonts'), path.join(root, 'web/public/fonts')];
 
@@ -43,6 +43,10 @@ try {
   }
   for (const dir of targets) {
     mkdirSync(dir, { recursive: true });
+    // Quita las fuentes de versiones anteriores de la marca.
+    for (const old of readdirSync(dir)) {
+      if (old.endsWith('.woff2') && !FONTS.includes(old)) rmSync(path.join(dir, old));
+    }
     for (const [name, file] of found) copyFileSync(file, path.join(dir, name));
     console.log(`Fuentes instaladas en ${path.relative(root, dir)}`);
   }

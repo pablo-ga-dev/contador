@@ -24,8 +24,8 @@ const STATIC_FILES: Record<string, [string, string]> = {
   '/logo.svg': ['logo.svg', 'image/svg+xml'],
   '/favicon.svg': ['favicon.svg', 'image/svg+xml'],
   // Las instala "npm run fuentes"; si faltan, el panel usa las del sistema.
-  '/fonts/Technor-Semibold.woff2': ['fonts/Technor-Semibold.woff2', 'font/woff2'],
-  '/fonts/Supreme-Regular.woff2': ['fonts/Supreme-Regular.woff2', 'font/woff2'],
+  '/fonts/Outfit-SemiBold.woff2': ['fonts/Outfit-SemiBold.woff2', 'font/woff2'],
+  '/fonts/Switzer-Light.woff2': ['fonts/Switzer-Light.woff2', 'font/woff2'],
 };
 const MAX_BODY_BYTES = 1024 * 1024;
 /** Un tramo cuyo final es más reciente que esto se considera "lo que estás haciendo ahora". */
