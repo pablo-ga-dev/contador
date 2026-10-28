@@ -102,9 +102,24 @@ const APP_NAMES = {
   'WINWORD': 'Word', 'EXCEL': 'Excel', 'POWERPNT': 'PowerPoint', 'OUTLOOK': 'Outlook',
   'olk': 'Outlook', 'ms-teams': 'Teams', 'Teams': 'Teams', 'Figma': 'Figma', 'Slack': 'Slack',
 };
-export const KIND_LABELS = { domain: 'Web', chat: 'Chat', app: 'App' };
+export const KIND_LABELS = { domain: 'Web', chat: 'Chat', app: 'App', manual: 'Manual' };
+
+/** Parte del tiempo de uso asignada a clientes o a interno, como "85 %"; "—" sin tiempo. */
+export const usedPercent = (used, total) => (total > 0 ? `${Math.round((used / total) * 100)} %` : '—');
+
+/** Acepta "1:30", "90", "90 min", "1h", "1h30", "1,5h". Devuelve minutos o null. */
+export function parseMinutes(text) {
+  const t = text.trim().toLowerCase().replace(',', '.');
+  let m;
+  if ((m = /^(\d+):(\d{1,2})$/.exec(t))) return Number(m[1]) * 60 + Number(m[2]);
+  if ((m = /^(\d+(?:\.\d+)?)\s*h(?:\s*(\d+)\s*(?:m|min)?)?$/.exec(t))) return Math.round(parseFloat(m[1]) * 60) + Number(m[2] ?? 0);
+  if ((m = /^(\d+)\s*(?:m|min)?$/.exec(t))) return Number(m[1]);
+  return null;
+}
 export const activityLabel = (a) => (a.kind === 'app' ? APP_NAMES[a.key] ?? a.key : a.key);
 export const groupLabel = (g) => (g.bucket === 'client' ? g.name : g.bucket === 'internal' ? 'Interno' : 'Sin cliente');
+/** "Sin cliente" llega a la web solo como total: el detalle se queda en el PC de cada uno. */
+export const UNASSIGNED_HINT = 'Solo el total: qué webs o apps fueron se queda en el PC de cada persona.';
 
 const pad = (n) => String(n).padStart(2, '0');
 export const toISODate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

@@ -80,6 +80,13 @@
   #picker li.create { color: var(--accent); }
   #picker .msg { margin-top: 6px; }
 
+  tr.manual td { background: var(--surface-0); }
+  input.manual-desc {
+    width: 100%; min-width: 0; padding: 4px 8px; font: inherit;
+    color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .add-manual { margin-top: 10px; }
+
   .actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 16px; }
   .empty { color: var(--text-muted); padding: 24px 8px; text-align: center; }
   .hours-warnings {
@@ -137,6 +144,7 @@
       <tbody id="rows"></tbody>
     </table>
     <div class="empty" id="empty" hidden>No hay actividad registrada este día.</div>
+    <button class="add-manual" id="add-manual" title="Reuniones, llamadas, visitas… lo que no hiciste en el ordenador">+ Añadir tiempo manual</button>
     <div class="hours-warnings" id="hours-warnings" role="status" hidden></div>
     <div class="comments" id="comments" hidden>
       <h3>Comentarios</h3>
@@ -161,10 +169,13 @@
 
   /** Las actividades más cortas que esto se agrupan en una sola fila. */
   const SHORT_SECONDS = 30;
-  const KIND_LABELS = { domain: 'Web', chat: 'Chat', app: 'App' };
+  const KIND_LABELS = { domain: 'Web', chat: 'Chat', app: 'App', manual: 'Manual' };
+  /** El tiempo manual solo puede ir a interno o a un cliente. */
+  const MANUAL_BUCKETS = ['internal'];
+  const MAX_KEY_LENGTH = 255;
   const FIXED = [
     { bucket: 'personal', label: 'Personal', hint: 'No se envía' },
-    { bucket: 'unassigned', label: 'Sin cliente' },
+    { bucket: 'unassigned', label: 'Sin cliente', hint: 'Solo se envía el total' },
     { bucket: 'internal', label: 'Interno' },
   ];
   const FIXED_LABEL = Object.fromEntries(FIXED.map((f) => [f.bucket, f.label]));
@@ -303,6 +314,86 @@
         remember: false,
       });
     }
+    // El tiempo apuntado a mano al confirmar, al final.
+    for (const m of review.confirmed?.items.filter((i) => i.kind === 'manual') ?? []) {
+      rows.push({ kind: 'manual', key: m.key, seconds: m.seconds, bucket: m.bucket, clientId: m.clientId, remember: false });
+    }
+  }
+
+  // --- Tiempo manual --------------------------------------------------------
+
+  function addManual() {
+    rows.push({ kind: 'manual', key: '', seconds: 30 * 60, bucket: 'internal', clientId: null, remember: false, fresh: true });
+    render();
+  }
+
+  function setManualTime(row, text) {
+    const minutes = parseMinutes(text);
+    if (!minutes) {
+      say('Escribe el tiempo como 1:30, 90 o 1h30.');
+    } else {
+      row.seconds = Math.min(minutes * 60, 24 * 3600);
+      $('msg').textContent = '';
+    }
+    render();
+  }
+
+  function renderManualRow(row) {
+    const tr = document.createElement('tr');
+    tr.className = 'manual';
+
+    const tdName = document.createElement('td');
+    const activity = document.createElement('div');
+    activity.className = 'activity';
+    const kind = document.createElement('span');
+    kind.className = 'kind';
+    kind.textContent = KIND_LABELS.manual;
+    const desc = document.createElement('input');
+    desc.className = 'manual-desc';
+    desc.value = row.key;
+    desc.maxLength = MAX_KEY_LENGTH;
+    desc.placeholder = 'Qué hiciste (p. ej. reunión con el cliente)';
+    desc.setAttribute('aria-label', 'Descripción del tiempo manual');
+    desc.addEventListener('input', () => { row.key = desc.value; });
+    activity.append(kind, desc);
+    tdName.append(activity);
+    if (row.fresh) {
+      delete row.fresh;
+      requestAnimationFrame(() => desc.focus());
+    }
+
+    const tdTime = document.createElement('td');
+    tdTime.className = 'time num';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'part-time';
+    input.inputMode = 'numeric';
+    input.value = hhmm(row.seconds);
+    input.setAttribute('aria-label', `Tiempo de ${row.key || 'tiempo manual'} (h:mm)`);
+    input.title = 'Escribe 1:30, 90 o 1h30';
+    input.addEventListener('change', () => setManualTime(row, input.value));
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+    tdTime.append(input);
+
+    const tdAssign = document.createElement('td');
+    tdAssign.className = 'assign';
+    tdAssign.append(pickButton(row, row, row.key || 'tiempo manual'));
+
+    const tdRemove = document.createElement('td');
+    tdRemove.className = 'remember';
+    const remove = document.createElement('button');
+    remove.className = 'icon';
+    remove.textContent = '✕';
+    remove.title = 'Quitar este tiempo';
+    remove.setAttribute('aria-label', `Quitar ${row.key || 'tiempo manual'}`);
+    remove.addEventListener('click', () => {
+      rows.splice(rows.indexOf(row), 1);
+      render();
+    });
+    tdRemove.append(remove);
+
+    tr.append(tdName, tdTime, tdAssign, tdRemove);
+    return tr;
   }
 
   function render() {
@@ -311,10 +402,15 @@
     const body = $('rows');
     body.replaceChildren();
     $('empty').hidden = rows.length > 0;
+    $('empty').textContent = 'No hay actividad registrada este día. Puedes añadir tiempo manual.';
     $('table').hidden = rows.length === 0;
     $('confirm').disabled = rows.length === 0;
     $('confirm').textContent = review.confirmed ? 'Volver a confirmar y enviar' : 'Confirmar y enviar';
     rows.forEach((row) => {
+      if (row.kind === 'manual') {
+        body.append(renderManualRow(row));
+        return;
+      }
       body.append(renderRow(row));
       if (row.parts) shares(row).forEach((share, i) => body.append(renderPart(row, share, i)));
     });
@@ -599,8 +695,9 @@
   function renderOptions() {
     const q = search.value.trim();
     const ql = q.toLowerCase();
+    const fixed = pickerRow?.kind === 'manual' ? FIXED.filter((f) => MANUAL_BUCKETS.includes(f.bucket)) : FIXED;
     options = [
-      ...FIXED.filter((f) => !ql || f.label.toLowerCase().includes(ql)).map((f) => ({ ...f, clientId: null })),
+      ...fixed.filter((f) => !ql || f.label.toLowerCase().includes(ql)).map((f) => ({ ...f, clientId: null })),
       { separator: true },
       ...catalog.clients
         .filter((c) => !ql || c.name.toLowerCase().includes(ql))
@@ -776,8 +873,20 @@
   }
 
   $('confirm').addEventListener('click', async () => {
+    const manual = rows.filter((r) => r.kind === 'manual');
+    if (manual.some((r) => !r.key.trim())) {
+      say('Escribe qué hiciste en cada tiempo manual (o quítalo).');
+      return;
+    }
+    if (manual.some((r) => r.seconds < 60)) {
+      say('Cada tiempo manual debe ser de al menos un minuto.');
+      return;
+    }
     // Una actividad dividida se envía como varias partidas, una por parte (sin recordar regla).
     const items = rows.flatMap((r) => {
+      if (r.kind === 'manual') {
+        return [{ kind: 'manual', key: r.key.trim(), seconds: r.seconds, bucket: r.bucket, clientId: r.clientId, remember: false }];
+      }
       if (r.members) return r.members.map((m) => ({ ...m, bucket: r.bucket, clientId: r.clientId, remember: false }));
       if (r.parts) {
         return shares(r)
@@ -809,6 +918,7 @@
     }
   });
 
+  $('add-manual').addEventListener('click', addManual);
   $('prev').addEventListener('click', () => selectDay(shiftDay(selected, -1)));
   $('next').addEventListener('click', () => selectDay(shiftDay(selected, 1)));
   $('today').addEventListener('click', () => selectDay(todayISO()));

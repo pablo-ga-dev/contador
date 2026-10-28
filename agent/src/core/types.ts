@@ -33,7 +33,10 @@ export interface BrowserSource {
 /** Cómo se agrupa el tiempo al revisarlo: por web, por chat de WhatsApp o por aplicación. */
 export type ActivityKind = 'domain' | 'chat' | 'app';
 
-/** A qué se asigna una actividad al revisar el día. "personal" nunca sale del PC. */
+/**
+ * A qué se asigna una actividad al revisar el día. "personal" nunca sale del PC;
+ * de "unassigned" (sin cliente) solo se envía el total del día.
+ */
 export type Bucket = 'client' | 'internal' | 'unassigned' | 'personal';
 
 export interface Activity {
@@ -42,7 +45,9 @@ export interface Activity {
   seconds: number;
 }
 
-export interface Assignment extends Activity {
+export interface Assignment extends Omit<Activity, 'kind'> {
+  /** "manual": tiempo apuntado a mano al revisar el día; su clave es la descripción. */
+  kind: ActivityKind | 'manual';
   bucket: Bucket;
   /** Solo cuando bucket es "client". */
   clientId: number | null;

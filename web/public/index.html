@@ -60,8 +60,24 @@
   .notes-list h4 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; }
   .notes-list .meta { color: var(--text-muted); font-size: 12px; margin-top: 10px; }
   .group .lines { padding-left: 4px; }
+  .cell.manual-only { font-style: italic; }
+  .usage { display: flex; gap: 4px 20px; flex-wrap: wrap; margin-bottom: 12px; color: var(--text-secondary); }
+  .usage strong { color: var(--text-primary); font-weight: 600; margin-left: 4px; }
+  .unassigned-total { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; color: var(--text-secondary); border-top: 1px solid var(--border); }
+  .unassigned-total small { display: block; color: var(--text-muted); font-size: 12px; }
+  .lines button.link { font-size: 12px; color: var(--danger); }
+
+  .toolbar .spacer { flex: 1; }
+  #manual h2 { margin-top: 0; }
+  .manual-form { display: grid; grid-template-columns: 150px 110px 220px 1fr auto; gap: 10px; align-items: end; }
+  .manual-form label { margin: 0; }
+  .manual-form select {
+    display: block; width: 100%; margin-top: 4px; padding: 7px 10px; font: inherit; color: var(--text-primary);
+    background: var(--surface-0); border: 1px solid var(--border); border-radius: 6px;
+  }
 
   @media (max-width: 800px) {
+    .manual-form { grid-template-columns: 1fr 1fr; }
     .detail-cols { grid-template-columns: 1fr; }
     .client-row { grid-template-columns: 120px 1fr 90px; }
     .table-scroll { overflow-x: auto; }
@@ -81,7 +97,21 @@
       <button id="next" aria-label="Siguiente">▶</button>
       <button id="now">Actual</button>
     </div>
+    <button class="primary" id="add-manual" aria-expanded="false" aria-controls="manual">+ Añadir tiempo</button>
   </div>
+
+  <section class="card" id="manual" hidden>
+    <h2>Añadir tiempo a mano</h2>
+    <p>Para lo que no hiciste en el ordenador: reuniones, llamadas, visitas… Se suma a tus horas de ese día.</p>
+    <form class="manual-form" id="manual-form">
+      <label>Día <input type="date" name="date" required></label>
+      <label>Tiempo <input name="time" required placeholder="1:30" inputmode="numeric" title="Escribe 1:30, 90 o 1h30" autocomplete="off"></label>
+      <label>Para <select name="target" required></select></label>
+      <label>Descripción <input name="description" required maxlength="255" placeholder="Reunión de seguimiento" autocomplete="off"></label>
+      <button class="primary" type="submit">Añadir</button>
+    </form>
+    <div class="msg" id="manual-msg"></div>
+  </section>
 
   <section class="card" id="person-view">
     <div class="table-scroll"><table id="week"></table></div>
@@ -99,8 +129,8 @@
 
 <script type="module">
   import {
-    KIND_LABELS, activityLabel, addDays, addMonths, api, capitalize, el, fmtDate, formatDuration,
-    groupLabel, mondayOf, monthLabel, showHoursAlerts, startPage, todayISO,
+    KIND_LABELS, UNASSIGNED_HINT, activityLabel, addDays, addMonths, api, capitalize, el, fmtDate, formatDuration,
+    groupLabel, mondayOf, monthLabel, parseMinutes, say, showHoursAlerts, startPage, todayISO, usedPercent,
   } from '/app.js';
 
   const $ = (id) => document.getElementById(id);
@@ -175,9 +205,10 @@
         const t = user.days[d];
         const seconds = t ? t.client + t.internal + t.unassigned : 0;
         total += seconds;
-        const cell = el('button', t ? 'cell' : 'cell none', t ? formatDuration(seconds) : '—');
+        const cell = el('button', !t ? 'cell none' : t.confirmed ? 'cell' : 'cell manual-only', t ? formatDuration(seconds) : '—');
         cell.title = t
-          ? `Clientes ${formatDuration(t.client)} · Interno ${formatDuration(t.internal)} · Sin cliente ${formatDuration(t.unassigned)}`
+          ? `Clientes ${formatDuration(t.client)} · Interno ${formatDuration(t.internal)} · Sin cliente ${formatDuration(t.unassigned)} · ${usedPercent(t.client + t.internal, seconds)} asignado` +
+            (t.confirmed ? '' : '\nSolo tiempo manual: el día aún no se ha confirmado en la app.')
           : 'Sin confirmar';
         cell.setAttribute('aria-pressed', 'false');
         cell.disabled = !t;
@@ -200,19 +231,37 @@
     detail.replaceChildren();
     const head = el('div', 'detail-head');
     head.append(el('h3', '', `${data.user.name} · ${fmtDate(date, { weekday: 'long', day: 'numeric', month: 'long' })}`));
-    const total = data.groups.reduce((s, g) => s + g.seconds, 0);
-    head.append(el('span', 'muted num', `Total ${formatDuration(total)}`));
+    if (!data.confirmedAt) head.append(el('span', 'muted', 'Sin confirmar en la app: solo tiempo manual'));
     detail.append(head);
+
+    // Tiempo de uso: todo lo enviado (lo personal nunca sale del PC). Asignado: clientes e interno.
+    const used = data.groups.reduce((s, g) => s + g.seconds, 0);
+    const total = used + data.unassignedSeconds;
+    const usage = el('div', 'usage');
+    for (const [label, value] of [['Tiempo de uso', formatDuration(total)], ['Asignado', formatDuration(used)], ['Utilizado', usedPercent(used, total)]]) {
+      const item = el('div', '', label);
+      item.append(el('strong', 'num', value));
+      usage.append(item);
+    }
+    detail.append(usage);
+
     if (data.note) detail.append(el('div', 'note general', data.note));
-    if (data.groups.length === 0) detail.append(el('p', 'empty', 'Día confirmado sin tiempo asignado.'));
+    if (data.groups.length === 0 && !data.unassignedSeconds) detail.append(el('p', 'empty', 'Día confirmado sin tiempo.'));
     for (const g of data.groups) {
       const group = el('div', 'group');
       const title = el('div', g.bucket === 'client' ? 'group-title' : 'group-title bucket');
       title.append(el('span', '', groupLabel(g)), el('span', 'num', formatDuration(g.seconds)));
       group.append(title);
       if (g.note) group.append(el('div', 'note', g.note));
-      group.append(activityList(g.items));
+      group.append(activityList(g.items, userId === me.id ? () => showDay(userId, date) : null));
       detail.append(group);
+    }
+    if (data.unassignedSeconds) {
+      const row = el('div', 'unassigned-total');
+      const label = el('span', '', 'Sin cliente');
+      label.append(el('small', '', UNASSIGNED_HINT));
+      row.append(label, el('span', 'num', formatDuration(data.unassignedSeconds)));
+      detail.append(row);
     }
     detail.hidden = false;
     detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -262,7 +311,7 @@
 
     const cols = el('div', 'detail-cols');
     const activities = el('div');
-    activities.append(el('h4', '', 'Actividades'), activityList(data.activities));
+    activities.append(el('h4', '', 'Actividades'), group.bucket === 'unassigned' ? el('p', 'muted', UNASSIGNED_HINT) : activityList(data.activities));
     const people = el('div');
     people.append(el('h4', '', 'Por persona'), simpleList(data.byUser.map((u) => [u.name, u.seconds])));
     const days = el('div');
@@ -286,16 +335,83 @@
 
   // --- Listas ---------------------------------------------------------------
 
-  function activityList(items) {
+  /** Con onDeleted, lo apuntado a mano en la web (lleva id) se puede borrar. */
+  function activityList(items, onDeleted = null) {
     const ul = el('ul', 'lines');
     for (const a of items) {
       const li = el('li');
       li.append(el('span', 'kind', KIND_LABELS[a.kind] ?? a.kind), el('span', 'label', activityLabel(a)), el('span', 'value num', formatDuration(a.seconds)));
       li.querySelector('.label').title = activityLabel(a);
+      if (onDeleted && a.id) {
+        const remove = el('button', 'link', 'Borrar');
+        remove.setAttribute('aria-label', `Borrar ${a.key}`);
+        remove.addEventListener('click', async () => {
+          if (!confirm(`¿Borrar «${a.key}» (${formatDuration(a.seconds)})?`)) return;
+          try {
+            await api('DELETE', `/api/days/manual/${a.id}`);
+            await loadWeek();
+            onDeleted();
+          } catch (err) {
+            $('msg').textContent = err.message;
+          }
+        });
+        li.append(remove);
+      }
       ul.append(li);
     }
     return ul;
   }
+
+  // --- Tiempo manual --------------------------------------------------------
+
+  async function openManual() {
+    const panel = $('manual');
+    const open = panel.hidden;
+    panel.hidden = !open;
+    $('add-manual').setAttribute('aria-expanded', String(open));
+    if (!open) return;
+    const form = $('manual-form');
+    const field = (n) => form.elements.namedItem(n);
+    field('date').max = todayISO();
+    if (!field('date').value) field('date').value = todayISO();
+    const target = field('target');
+    const previous = target.value;
+    const clients = await api('GET', '/api/clients');
+    target.replaceChildren(new Option('Interno', 'internal'), ...clients.map((c) => new Option(c.name, `c${c.id}`)));
+    if ([...target.options].some((o) => o.value === previous)) target.value = previous;
+    field('time').focus();
+  }
+
+  $('manual-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const field = (n) => form.elements.namedItem(n).value;
+    const minutes = parseMinutes(field('time'));
+    if (!minutes) {
+      say('manual-msg', 'Escribe el tiempo como 1:30, 90 o 1h30.');
+      return;
+    }
+    const target = field('target');
+    const date = field('date');
+    try {
+      await api('POST', `/api/days/${date}/manual`, {
+        seconds: minutes * 60,
+        bucket: target === 'internal' ? 'internal' : 'client',
+        clientId: target === 'internal' ? null : Number(target.slice(1)),
+        description: field('description'),
+      });
+      say('manual-msg', `Añadido: ${formatDuration(minutes * 60)} el ${fmtDate(date, { weekday: 'long', day: 'numeric', month: 'long' })}.`, 'ok');
+      form.elements.namedItem('time').value = '';
+      form.elements.namedItem('description').value = '';
+      // Se muestra la semana de ese día con su detalle.
+      if (state.view !== 'person') setView('person');
+      state.week = mondayOf(date);
+      await load();
+      showDay(me.id, date);
+    } catch (err) {
+      say('manual-msg', err.message);
+    }
+  });
 
   function simpleList(pairs) {
     const ul = el('ul', 'lines');
@@ -318,7 +434,9 @@
     load();
   });
 
-  await startPage('/');
+  $('add-manual').addEventListener('click', () => openManual().catch((err) => say('manual-msg', err.message)));
+
+  const me = await startPage('/');
   setView(state.view);
   showHoursAlerts();
 </script>
