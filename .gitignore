@@ -11,3 +11,10 @@ web/public/fonts/
 # Configuraciones locales de prueba (.env.mariadb, .env.mysql...)
 .env.*
 !.env.example
+
+# Proyecto de Xcode de la extensión de Safari (se genera con safari/crear-proyecto.sh).
+safari/*
+!safari/crear-proyecto.sh
+
+# Extensión firmada para Firefox (npx web-ext sign).
+web-ext-artifacts/

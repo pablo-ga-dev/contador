@@ -12,8 +12,9 @@ export const config = {
   browserStaleSeconds: 90,
   /** Apps que consideramos navegadores (en minúsculas): procesos de Windows y apps de macOS. */
   browserApps: [
-    'chrome', 'msedge', 'brave', 'opera', 'vivaldi',
+    'chrome', 'msedge', 'brave', 'opera', 'vivaldi', 'firefox',
     'google chrome', 'microsoft edge', 'brave browser', 'arc', 'chromium',
+    'firefox developer edition', 'firefox nightly', 'safari', 'safari technology preview',
   ],
   /** Carpeta de datos locales. Nada de aquí sale del equipo. */
   dataDir: process.env.CONTADOR_DATA_DIR ?? defaultDataDir(),

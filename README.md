@@ -167,9 +167,45 @@ O de un día concreto: `npm run report 2026-10-27`.
 
 ### Instalar la extensión del navegador
 
+La misma carpeta `extension` vale para todos los navegadores.
+
+**Chrome, Edge, Brave, Opera, Vivaldi, Arc**
+
 1. Abre `chrome://extensions` (o `edge://extensions` en Edge).
 2. Activa el **Modo de desarrollador**.
 3. Pulsa **Cargar descomprimida** y elige la carpeta `extension` de este repositorio.
+
+**Firefox** (128 o posterior)
+
+- *Para probar*: abre `about:debugging#/runtime/this-firefox`, pulsa **Cargar
+  complemento temporal** y elige `extension/manifest.json`. Firefox la quita al
+  cerrarse.
+- *Para dejarla instalada*, Firefox exige que esté firmada por Mozilla. Es gratis
+  y no se publica: con una cuenta en addons.mozilla.org, crea unas claves de API
+  (*Herramientas para desarrolladores → Gestionar claves de API*) y ejecuta
+
+  ```bash
+  npx web-ext sign --source-dir extension --channel unlisted --api-key TU_CLAVE --api-secret TU_SECRETO
+  ```
+
+  Genera un `.xpi` en `web-ext-artifacts/` que se instala en cualquier Firefox
+  arrastrándolo a la ventana. Cada versión nueva de la extensión hay que firmarla
+  otra vez (subiendo `version` en `manifest.json`).
+
+**Safari** (Mac, con Xcode)
+
+Safari solo admite extensiones dentro de una app de Mac, que se crea con Xcode:
+
+```bash
+sh safari/crear-proyecto.sh
+```
+
+y sigue los pasos que muestra: compilar en Xcode, permitir extensiones sin
+firmar en Safari (Ajustes → Desarrollador) y activar DIALOGUE en Ajustes →
+Extensiones, **permitida siempre en todas las webs** (si no, Safari no le deja
+ver el dominio). Safari vuelve a desactivar las extensiones sin firmar al
+reiniciarse; para que se quede activada hay que firmarla con una cuenta de
+desarrollador de Apple.
 
 Sin la extensión el agente funciona igual, pero no sabrá en qué dominio estás.
 
@@ -323,7 +359,8 @@ agent/src/
   sources/
     windows/           ventana activa, inactividad y chat de WhatsApp vía PowerShell
     browser/           último dominio recibido de la extensión
-extension/             extensión Manifest V3 para navegadores Chromium
+extension/             extensión Manifest V3 (Chrome, Edge, Firefox y Safari)
+safari/                crear-proyecto.sh: proyecto de Xcode de la extensión para Safari
 web/
   src/
     server.ts          servidor web, protección CSRF y migraciones al arrancar
@@ -353,7 +390,9 @@ podría mostrarlo tal cual en su ventana.
   `main` y su primer texto). Si una actualización de WhatsApp la cambia, el
   tiempo se seguirá contando como WhatsApp, pero sin chat, hasta que lo ajustemos.
 - WhatsApp Web en el navegador cuenta por dominio (`web.whatsapp.com`), aún sin chat.
-- La extensión es solo para navegadores Chromium (Chrome, Edge, Brave...); Firefox aún no.
+- En Firefox y Safari la extensión hay que firmarla para que se quede instalada
+  (ver «Instalar la extensión del navegador»). La de Safari aún no se ha probado
+  en un Mac real.
 - El arranque con Windows apunta a la carpeta del proyecto: si la mueves, vuelve
   a activarlo en Ajustes. Al iniciar sesión puede verse un instante una ventana
   de PowerShell.
