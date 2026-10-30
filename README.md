@@ -144,6 +144,7 @@ Tiene tres páginas:
     una vez al día y solo si estás delante del PC.
   - *Arranque automático*: activarlo o desactivarlo. Avisa si el proyecto se
     ha movido de carpeta y hay que volver a activarlo.
+  - *Apariencia*: tema **Automático** (el del sistema), **Claro** u **Oscuro**.
   - *Datos en este PC*: dónde se guarda todo y **cuántos días se guarda el
     detalle** (por defecto 60, de 7 a 365). Pasado ese tiempo, la actividad de
     cada día se borra sola del PC (al arrancar y cada 6 horas); lo que no se
@@ -262,7 +263,8 @@ temporal nueva y cierra sus sesiones) y `npm run set-role -- su@email.com admin`
   en el detalle de cada cliente.
 - **Ajustes**: nombre, email, contraseña y el **agente del PC**: generar su
   código (se muestra una vez y generar otro invalida el anterior), ver cuándo
-  contactó por última vez y desconectarlo.
+  contactó por última vez y desconectarlo. En *Apariencia*, tema **Automático**
+  (el del sistema), **Claro** u **Oscuro**; se recuerda en cada navegador.
 - Inicio de sesión (vuelve a la página que ibas a abrir) y alta de usuarios por comando.
 - API para el agente:
   - `GET /api/clients` y `GET /api/rules` (qué cliente se preselecciona para

@@ -29,39 +29,27 @@
   --font-title: 'Outfit', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   --font-text: 'Switzer', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
 
-  --surface-0: var(--pure-clean);
-  --surface-1: #FFFFFF;
-  --border: var(--platinum-frame);
-  --hover: #EEF2F7;
-  --track: #EEF2F7;
-  --text-primary: var(--deep-steel);
-  --text-secondary: #475569;
+  /* Tema: el del sistema, salvo que se elija otro en Ajustes (data-theme en <html>, ver theme.js).
+     Cada color es light-dark(en claro, en oscuro). */
+  color-scheme: light dark;
+  --surface-0: light-dark(var(--pure-clean), var(--deep-night));
+  --surface-1: light-dark(#FFFFFF, #0A1226);
+  --border: light-dark(var(--platinum-frame), #17233D);
+  --hover: light-dark(#EEF2F7, #111B33);
+  --track: light-dark(#EEF2F7, #111B33);
+  --text-primary: light-dark(var(--deep-steel), var(--platinum-frame));
+  --text-secondary: light-dark(#475569, #94A3B8);
   --text-muted: var(--idle);
-  --accent: var(--cobalt-plate);
-  --accent-text: #FFFFFF;
+  --accent: light-dark(var(--cobalt-plate), var(--temporal-pulse));
+  --accent-text: light-dark(#FFFFFF, var(--deep-steel));
   /* El cian puro no contrasta lo bastante sobre blanco: en modo claro, uno más oscuro. */
-  --bar: #0A8FB0;
-  --pulse: var(--temporal-pulse);
-  --danger: #C2410C;
-  --ok: #047857;
+  --bar: light-dark(#0A8FB0, var(--temporal-pulse));
+  --pulse: light-dark(#0A8FB0, var(--temporal-pulse));
+  --danger: light-dark(#C2410C, #F87171);
+  --ok: light-dark(#047857, #34D399);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface-0: var(--deep-night);
-    --surface-1: #0A1226;
-    --border: #17233D;
-    --hover: #111B33;
-    --track: #111B33;
-    --text-primary: var(--platinum-frame);
-    --text-secondary: #94A3B8;
-    --text-muted: var(--idle);
-    --accent: var(--temporal-pulse);
-    --accent-text: var(--deep-steel);
-    --bar: var(--temporal-pulse);
-    --danger: #F87171;
-    --ok: #34D399;
-  }
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body {
@@ -155,3 +143,7 @@ button.danger { color: var(--danger); }
 
 button.link { border: 0; padding: 2px 4px; color: var(--accent); }
 button.link:hover:not(:disabled) { background: transparent; text-decoration: underline; }
+
+/* Selector de tema (Ajustes). */
+.theme-choice { display: inline-flex; gap: 4px; }
+.theme-choice button[aria-pressed="true"] { background: var(--track); border-color: var(--accent); font-weight: 600; }
